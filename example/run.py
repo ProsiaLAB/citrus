@@ -1,4 +1,10 @@
-import numpy as np
+import sys
+
+sys.path.append("..")
+
+
+from citrus import datastructures as ds
+from citrus.configure import load_config
 
 
 def main():
@@ -8,9 +14,10 @@ def main():
     3. Initialize the images with default values.
     4. Call input routines from `citrus/model.py` to set both `par` and `image` values.
     """
+
     default_angle = -999.0
 
-    par = init_input_parameters()
+    par, imgs = load_config()
 
 
 if __name__ == "__main__":

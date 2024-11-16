@@ -1,0 +1,28 @@
+[parameters]
+radius = 2000                              # in AU
+min_scale = 0.5                            # in AU
+p_intensity = 4000
+sink_points = 3000
+dust = "jena_thin_e6.tab"
+mol_data_file = ["hco+@xpol.dat"]
+sampling = 2
+nsolve_iters = 14
+reset_RNG = 0
+collisional_partner_IDs = [1]
+nmol_weights = [1.0]
+collisional_partner_names = ["H2"]
+collisional_partner_mol_weights = [2.0159]
+
+[image-01]
+nchan = 61
+vel_res = 500.0
+trans = 3
+pixels = 100
+img_resolution = 0.1
+distance = 140.0
+source_velocity = 0.0
+azimuth = 0.0
+inclination = 0.0
+position_angle = 0.0
+
+# Once can add more images by adding more sections like [image-##]
