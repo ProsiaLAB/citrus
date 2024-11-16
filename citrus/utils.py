@@ -1,56 +1,90 @@
+import numpy as np
 
 
-"""
-    calc_source_fn(dτ::Float64, taylor_cutoff::Float64) -> (Float64, Float64)
- 
-The source function S is defined as ``j_ν/α``, which is clearly not
-defined for alpha==0. However S is used in the algorithm only in the
-term (1-exp[-alpha*ds])*S, which is defined for all values of alpha.
-The present function calculates this term and returns it in the
-argument remnantSnu. For values of abs(alpha*ds) less than a pre-
-calculated cutoff supplied in configInfo, a Taylor approximation is
-used.
-
-Note that the same cutoff condition holds for replacement of
-exp(-dTau) by its Taylor expansion to 3rd order.
-
-Note that this is called from within the multi-threaded block.
-"""
-function calc_source_fn(dτ::Float64, taylor_cutoff::Float64)
+def calculate_source_fn(dtau: float, taylor_cutoff: float):
     """
+    Calculate the source function for a given optical depth and cutoff.
 
+    Parameters
+    ----------
+    dtau : float
+        The optical depth.
+    taylor_cutoff : float
+        The cutoff for the Taylor expansion.
+
+    Returns
+    -------
+    remnantSnu : float
+        The source function.
+    exp_dtau : float
+        The exponential of the optical depth.
     """
-    remnant_S_ν = 0.0
-    exp_dτ = 0.0
-    if abs(dτ) < taylor_cutoff
-        remnant_S_ν = 1.0 - dτ * (1.0 - dτ * (1.0 / 3.0)) * (1.0 / 2.0)
-        exp_dτ = 1.0 - dτ * remnant_S_ν
-    else
-        exp_dτ = exp(-dτ)
-        remnant_S_ν = (1.0 - exp_dτ) / dτ
-    end
-    return remnant_S_ν, exp_dτ
-end
+    if np.abs(dtau) < taylor_cutoff:
+        remnant_Snu = 1.0 - dtau * (1.0 - dtau * (1.0 / 3.0)) * (1.0 / 2.0)
+        exp_dtau = 1.0 - dtau * remnant_Snu
+    else:
+        exp_dtau: float = np.exp(-dtau)
+        remnant_Snu: float = (1.0 - exp_dtau) / dtau
+    return remnant_Snu, exp_dtau
 
-"""
-Calculate the Planck function for a given frequency and temperature.
-"""
-function planck_fn(freq::Float64, temp::Float64)
+
+def planck_fn(freq: float, temp: float):
+    """
+    Calculate the Planck function for a given frequency and temperature.
+
+    Parameters
+    ----------
+    freq : float
+        The frequency.
+    temp : float
+        The temperature.
+
+    Returns
+    -------
+    bb : float
+        The Planck function.
+    """
     bb = 10.0
-    if temp < eps
+    if temp < np.finfo(float).eps:
         bb = 0.0
-    else
-        wn = freq / clight
-        if (hplanck * freq > 100 * kboltz * temp)
-            bb = 2.0 * hplanck * wn * wn * freq * exp(-hplanck * freq / kboltz / temp)
-        else
-            bb = 2.0 * hplanck * wn * wn * freq / (exp(hplanck * freq / kboltz / temp) - 1.0)
-        end
-    end
+    else:
+        wn = freq / 299792458.0
+        if 6.62607015e-34 * freq > 100 * 1.380649e-23 * temp:
+            bb = (
+                2.0
+                * 6.62607015e-34
+                * wn
+                * wn
+                * freq
+                * np.exp(-6.62607015e-34 * freq / 1.380649e-23 / temp)
+            )
+        else:
+            bb = (
+                2.0
+                * 6.62607015e-34
+                * wn
+                * wn
+                * freq
+                / (np.exp(6.62607015e-34 * freq / 1.380649e-23 / temp) - 1.0)
+            )
     return bb
-end
 
-function gauss_line(v::Float64, one_on_sigma::Float64)
+
+def gauss_line(v: float, one_on_sigma: float):
+    """
+    Calculate the Gaussian line profile for a given velocity and inverse sigma.
+
+    Parameters
+    ----------
+    v : float
+        The velocity.
+    one_on_sigma : float
+        The inverse sigma.
+
+    Returns
+    -------
+    float
+        The Gaussian line profile.
+    """
     val = v * v * one_on_sigma * one_on_sigma
-    return exp(-val)
-end
+    return np.exp(-val)
