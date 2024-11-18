@@ -1,5 +1,44 @@
 import numpy as np
 
+from . import constants as cc
+
+
+def get_density(x, y, z, density, cutoff):
+    r_min = cutoff * cc.AU_SI
+
+    r = np.sqrt(x * x + y * y + z * z)
+
+    if r > r_min:
+        r_to_use = r
+    else:
+        r_to_use = r_min
+
+    density[0] = 1.5e6 * ((r_to_use / (300 * cc.AU_SI)) ** (-1.5)) * 1e6
+
+    return density
+
+
+def get_temperature(x, y, z, temperature, fT_r):
+    """
+    fT_r is an array containing temperatures as a function
+    of radial distance from the origin.
+    """
+    r = np.sqrt(x * x + y * y + z * z)
+
+    mask = (r > fT_r[0, :-1]) & (r < fT_r[0, 1:])
+    x0 = np.where(mask)[0][0]
+
+    if r < fT_r[0, 0]:
+        temperature[0] = fT_r[1, 0]
+    elif r > fT_r[0, -1]:
+        temperature[0] = fT_r[1, -1]
+    else:
+        temperature[0] = fT_r[1, x0] + (r - fT_r[0, x0]) * (
+            fT_r[1, x0 + 1] - fT_r[1, x0]
+        ) / (fT_r[0, x0 + 1] - fT_r[0, x0])
+
+    return temperature
+
 
 def calculate_source_fn(dtau: float, taylor_cutoff: float):
     """
