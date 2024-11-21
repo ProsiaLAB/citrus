@@ -40,6 +40,31 @@ def get_temperature(x, y, z, temperature, fT_r):
     return temperature
 
 
+def get_abundance(): ...
+
+
+def get_doppler(): ...
+
+
+def get_velocity(x, y, z, velocity, cutoff):
+    r_min = cutoff * cc.AU_SI
+
+    r = np.sqrt(x * x + y * y + z * z)
+
+    if r > r_min:
+        r_to_use = r
+    else:
+        r_to_use = r_min
+
+    free_fall_velocity = np.sqrt(2.0 * cc.GRAVITATIONAL_CONST_SI * 1.989e30 / r_to_use)
+
+    velocity[0] = -x * free_fall_velocity / r_to_use
+    velocity[1] = -y * free_fall_velocity / r_to_use
+    velocity[2] = -z * free_fall_velocity / r_to_use
+
+    return velocity
+
+
 def calculate_source_fn(dtau: float, taylor_cutoff: float):
     """
     Calculate the source function for a given optical depth and cutoff.

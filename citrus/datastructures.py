@@ -1,4 +1,8 @@
+from dataclasses import dataclass, field
+
 import numpy as np
+
+from . import constants as cc
 
 MAX_NUM_OF_SPECIES = 100
 MAX_NUM_OF_IMAGES = 100
@@ -9,208 +13,239 @@ DENSITY_POWER = 0.2
 MAX_NUM_HIGH = 10  # ??? What this bro?
 
 
-def init_input_parameters():
-    fields = np.dtype(
-        [
-            ("radius", "f8"),
-            ("min_scale", "f8"),
-            ("cmb_temp", "f8"),
-            ("nmol_weights", "f8", MAX_NUM_OF_COLLISIONAL_PARTNERS),
-            ("grid_density_max_locations", "f8", (MAX_NUM_HIGH, 3)),
-            ("grid_density_max_values", "f8", (MAX_NUM_HIGH, 3)),
-            ("collisional_partner_mol_weights", "f8", MAX_NUM_OF_COLLISIONAL_PARTNERS),
-            ("sink_points", "i8"),
-            ("p_intensity", "i8"),
-            ("blend", "i8"),
-            ("collisional_partner_IDs", "i8", MAX_NUM_OF_COLLISIONAL_PARTNERS),
-            ("ray_trace_algorithm", "i8"),
-            ("sampling_algorithm", "i8"),
-            ("sampling", "i8"),
-            ("LTE_only", "i8"),
-            ("init_LTE", "i8"),
-            ("anti_alias", "i8"),
-            ("polarization", "i8"),
-            ("nthreads", "i8"),
-            ("nsolve_iters", "i8"),
-            # ("collisional_partner_user_set_flags", "i8"),
-            ("grid_data_file", "U128", MAX_NUM_OF_SPECIES),
-            ("mol_data_file", "U128", MAX_NUM_OF_SPECIES),
-            ("collisional_partner_names", "U128", MAX_NUM_OF_COLLISIONAL_PARTNERS),
-            ("output_file", "U128"),
-            ("binoutput_file", "U128"),
-            ("grid_file", "U128"),
-            ("pre_grid", "U128"),
-            ("restart", "U128"),
-            ("dust", "U128"),
-            ("grid_in_file", "U128"),
-            ("grid_out_files", "U128", MAX_NUM_OF_IMAGES),
-            ("reset_RNG", "bool"),
-            ("do_solve_rte", "bool"),
-        ],
-        align=True,
+@dataclass
+class InputParams:
+    radius: float = 0.0
+    min_scale: float = 0.0
+    cmb_temp: float = cc.LOCAL_CMB_TEMP_SI
+    sink_points: int = 0
+    p_intensity: int = 0
+    blend: int = 0
+    ray_trace_algorithm: int = 0
+    sampling_algorithm: int = 0
+    sampling: int = 2
+    LTE_only: int = 0
+    init_LTE: int = 0
+    anti_alias: int = 1
+    polarization: int = 0
+    nthreads: int = 1
+    nsolve_iters: int = 0
+    output_file: str = ""
+    binoutput_file: str = ""
+    grid_file: str = ""
+    pre_grid: str = ""
+    restart: str = ""
+    dust: str = ""
+    grid_in_file: str = ""
+    reset_RNG: bool = False
+    do_solve_rte: bool = False
+
+    nmol_weights: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_COLLISIONAL_PARTNERS)
     )
-    return np.zeros((1,), dtype=fields)
-
-
-def init_collisional_data():
-    fields = np.dtype(
-        [
-            ("down", "f8"),
-            ("temp", "f8"),
-            ("partner_ID", "i4"),
-            ("ntemp", "i4"),
-            ("ntrans", "i4"),
-            ("lcl", "i4"),
-            ("lcu", "i4"),
-            ("density_index", "i4"),
-            ("name", "U10"),
-        ],
-        align=True,
+    grid_density_max_locations: np.ndarray = field(
+        default_factory=lambda: np.zeros((MAX_NUM_HIGH, 3))
     )
-    return np.zeros((1,), dtype=fields)
-
-
-def init_images(n_images):
-    if n_images == 1:
-        return init_image()
-    fields = np.dtype(
-        [
-            ("nchan", "i8", n_images),
-            ("trans", "i8", n_images),
-            ("mol_I", "i8", n_images),
-            ("vel_res", "f8", n_images),
-            ("img_res", "f8", n_images),
-            ("pixels", "i8", n_images),
-            ("unit", "i8", n_images),
-            ("units", "U10", n_images),
-            ("freq", "f8", n_images),
-            ("bandwidth", "f8", n_images),
-            ("filename", "U128", n_images),
-            ("source_velocity", "f8", n_images),
-            ("theta", "f8", n_images),
-            ("phi", "f8", n_images),
-            ("inclination", "f8", n_images),
-            ("position_angle", "f8", n_images),
-            ("azimuth", "f8", n_images),
-            ("distance", "f8", n_images),
-            ("do_interpolate_vels", "bool", n_images),
-        ]
+    grid_density_max_values: np.ndarray = field(
+        default_factory=lambda: np.zeros((MAX_NUM_HIGH, 3))
     )
-    return np.zeros(n_images, dtype=fields)
-
-
-def init_image():
-    fields = np.dtype(
-        [
-            ("nchan", "i8"),
-            ("trans", "i8"),
-            ("mol_I", "i8"),
-            ("vel_res", "f8"),
-            ("img_resolution", "f8"),
-            ("pixels", "i8"),
-            ("unit", "i8"),
-            ("units", "U10"),
-            ("freq", "f8"),
-            ("bandwidth", "f8"),
-            ("filename", "U128"),
-            ("source_velocity", "f8"),
-            ("theta", "f8"),
-            ("phi", "f8"),
-            ("inclination", "f8"),
-            ("position_angle", "f8"),
-            ("azimuth", "f8"),
-            ("distance", "f8"),
-            ("do_interpolate_vels", "bool"),
-        ]
+    collisional_partner_mol_weights: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_COLLISIONAL_PARTNERS)
     )
-    return np.zeros((1,), dtype=fields)
-
-
-def init_molecule_data():
-    fields = np.dtype(
-        [
-            ("nlev", "i4"),
-            ("nline", "i4"),
-            ("npart", "i4"),
-            ("lal", "i4"),
-            ("lau", "i4"),
-            ("aeinst", "f8"),
-            ("freq", "f8"),
-            ("beinstu", "f8"),
-            ("beinstl", "f8"),
-            ("eterm", "f8"),
-            ("gstat", "f8"),
-            ("girr", "f8"),
-            ("cmb", "f8"),
-            ("amass", "f8"),
-            ("part", init_collisional_data()),
-            ("mol_name", "U10"),
-        ],
-        align=True,
+    collisional_partner_IDs: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_COLLISIONAL_PARTNERS)
     )
-    return np.zeros((1,), dtype=fields)
-
-
-def init_rates():
-    fields = np.dtype(
-        [
-            ("t_binlow", "i4"),
-            ("interp_coeff", "f8"),
-        ],
-        align=True,
+    grid_data_file: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_SPECIES)
     )
-    return np.zeros((1,), dtype=fields)
-
-
-def init_continuum_line():
-    fields = np.dtype(
-        [
-            ("dust", "f8"),
-            ("knu", "f8"),
-        ],
-        align=True,
+    mol_data_file: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_SPECIES)
     )
-    return np.zeros((1,), dtype=fields)
-
-
-def init_populations():
-    fields = np.dtype(
-        [
-            ("pops", "f8"),
-            ("spec_num_dens", "f8"),
-            ("dopb", "f8"),
-            ("binv", "f8"),
-            ("nmol", "f8"),
-            ("abun", "f8"),
-            ("partner", init_rates()),
-            ("cont", init_continuum_line()),
-        ],
-        align=True,
+    collisional_partner_names: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_COLLISIONAL_PARTNERS)
     )
-    return np.zeros((1,), dtype=fields)
-
-
-def init_line_data():
-    fields = np.dtype(
-        [
-            ("nlev", "i4"),
-            ("nline", "i4"),
-            ("npart", "i4"),
-            ("lal", "i4"),
-            ("lau", "i4"),
-            ("aeinst", "f8"),
-            ("freq", "f8"),
-            ("beinstu", "f8"),
-            ("beinstl", "f8"),
-            ("eterm", "f8"),
-            ("gstat", "f8"),
-            ("girr", "f8"),
-            ("cmb", "f8"),
-            ("amass", "f8"),
-            ("part", init_collisional_data()),
-            ("mol_name", "U10"),
-            ("pops", init_populations()),
-        ],
-        align=True,
+    grid_out_files: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_IMAGES)
     )
-    return np.zeros((1,), dtype=fields)
+
+
+@dataclass
+class ConfigParams:
+    radius: float = 0.0
+    min_scale: float = 0.0
+    cmb_temp: float = 0.0
+    sink_points: int = 0
+    p_intensity: int = 0
+    blend: int = 0
+    ray_trace_algorithm: int = 0
+    sampling_algorithm: int = 0
+    sampling: int = 0
+    LTE_only: int = 0
+    init_LTE: int = 0
+    anti_alias: int = 0
+    polarization: int = 0
+    nthreads: int = 0
+    nsolve_iters: int = 0
+    collisional_partner_user_set_flags: int = 0
+    output_file: str = ""
+    binoutput_file: str = ""
+    grid_file: str = ""
+    pre_grid: str = ""
+    restart: str = ""
+    dust: str = ""
+    grid_in_file: str = ""
+    reset_RNG: bool = False
+    do_solve_rte: bool = False
+    radius_squ: float = 0.0
+    min_scale_squ: float = 0.0
+    taylor_cutoff: float = 0.0
+    grid_density_global_max: float = 0.0
+    ncell: int = 0
+    n_images: int = 0
+    n_species: int = 0
+    num_densities: int = 0
+    do_pregrid: int = 0
+    num_grid_density_maxima: int = 0
+    num_dims: int = 0
+    n_line_images: int = 0
+    n_cont_images: int = 0
+    data_flags: int = 0
+    n_solve_iters_done: int = 0
+    do_interpolate_vels: bool = False
+    use_abun: bool = False
+    do_mol_calcs: bool = False
+    use_vel_func_in_raytrace: bool = False
+    edge_vels_available: bool = False
+
+    nmol_weights: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_COLLISIONAL_PARTNERS)
+    )
+    grid_density_max_locations: np.ndarray = field(
+        default_factory=lambda: np.zeros((MAX_NUM_HIGH, 3))
+    )
+    grid_density_max_values: np.ndarray = field(
+        default_factory=lambda: np.zeros((MAX_NUM_HIGH, 3))
+    )
+    collisional_partner_mol_weights: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_COLLISIONAL_PARTNERS)
+    )
+    collisional_partner_IDs: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_COLLISIONAL_PARTNERS)
+    )
+    grid_data_file: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_SPECIES)
+    )
+    mol_data_file: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_SPECIES)
+    )
+    collisional_partner_names: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_COLLISIONAL_PARTNERS)
+    )
+    grid_out_files: np.ndarray = field(
+        default_factory=lambda: np.zeros(MAX_NUM_OF_IMAGES)
+    )
+    write_grid_at_stage: np.ndarray = field(
+        default_factory=lambda: np.zeros(NUM_OF_GRID_STAGES)
+    )
+
+
+@dataclass
+class CollisionalData:
+    down: float
+    temp: float
+    partner_ID: int
+    ntemp: int
+    ntrans: int
+    lcl: int
+    lcu: int
+    density_index: int
+    name: str
+
+
+@dataclass
+class Image:
+    default_angle = -999.0
+    nchan: int = 0
+    trans: int = -1
+    mol_I: int = -1
+    vel_res: float = -1.0
+    img_res: float = -1.0
+    pixels: int = -1
+    unit: int = 0
+    units: str = "Jy/pixel"
+    freq: float = -1.0
+    bandwidth: float = -1.0
+    filename: str = ""
+    source_velocity: float = 0.0
+    theta: float = 0.0
+    phi: float = 0.0
+    inclination: float = default_angle
+    position_angle: float = default_angle
+    azimuth: float = default_angle
+    distance: float = -1.0
+    do_interpolate_vels: bool = False
+
+
+@dataclass
+class MoleculeData:
+    nlev: int
+    nline: int
+    npart: int
+    lal: int
+    lau: int
+    aeinst: float
+    freq: float
+    beinstu: float
+    beinstl: float
+    eterm: float
+    gstat: float
+    girr: float
+    cmb: float
+    amass: float
+    part: CollisionalData
+    mol_name: str
+
+
+@dataclass
+class Rates:
+    t_binlow: int
+    interp_coeff: float
+
+
+@dataclass
+class ContinuumLine:
+    dust: float
+    knu: float
+
+
+@dataclass
+class Populations:
+    pops: float
+    spec_num_dens: float
+    dopb: float
+    binv: float
+    nmol: float
+    abun: float
+    partner: Rates
+    cont: ContinuumLine
+
+
+@dataclass
+class LineData:
+    nlev: int
+    nline: int
+    npart: int
+    lal: int
+    lau: int
+    aeinst: float
+    freq: float
+    beinstu: float
+    beinstl: float
+    eterm: float
+    gstat: float
+    girr: float
+    cmb: float
+    amass: float
+    part: CollisionalData
+    mol_name: str
+    pops: Populations
