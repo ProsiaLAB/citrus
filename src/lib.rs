@@ -1,3 +1,5 @@
+use io::Config;
+
 pub mod config;
 pub mod constants;
 pub mod grid;
@@ -5,6 +7,7 @@ pub mod io;
 pub mod messages;
 pub mod raytrace;
 pub mod solver;
+pub mod source;
 pub mod utils;
 
 pub const MAX_NUM_OF_SPECIES: usize = 100;
@@ -15,13 +18,71 @@ pub const TYPICAL_ISM_DENSITY: f64 = 1e3;
 pub const DENSITY_POWER: f64 = 0.2;
 pub const MAX_NUM_HIGH: usize = 10; // ??? What this bro?
 
-pub fn run() {
-    println!("{}", constants::AMU_SI);
+pub fn run(path: &str) {
+    println!("Welcome to citrus, A verstalie line modelling engine based on LIME.");
+    // Load the configuration file
+    let input_data = match Config::from_toml_file(path) {
+        Ok(data) => data, // Bind the successfully parsed data to `input_data`
+        Err(e) => {
+            eprintln!("Error reading the input file: {}", e);
+            return; // Exit early if there’s an error
+        }
+    };
+
+    // Extract parameters now that we are outside the match block
+    let pars = input_data.parameters;
+    let mut config = ConfigParams::default();
+
+    let imgs = input_data.images;
+    println!("Images: {:?}", imgs);
+
+    // // Map pars to config
+    // config.radius = pars.radius;
+    // config.min_scale = pars.min_scale;
+    // config.p_intensity = pars.p_intensity;
+    // config.sink_points = pars.sink_points;
+    // config.sampling_algorithm = pars.sampling_algorithm;
+    // config.sampling = pars.sampling;
+    // config.lte_only = pars.lte_only;
+    // config.init_lte = pars.init_lte;
+    // config.cmb_temp = pars.cmb_temp;
+    // config.blend = pars.blend;
+    // config.anti_alias = pars.anti_alias;
+    // config.polarization = pars.polarization;
+    // config.nthreads = pars.nthreads;
+    // config.nsolve_iters = pars.nsolve_iters;
+    // config.ray_trace_algorithm = pars.ray_trace_algorithm;
+    // config.reset_rng = pars.reset_rng;
+    // config.do_solve_rte = pars.do_solve_rte;
+    // config.dust = pars.dust;
+    // config.output_file = pars.output_file;
+    // config.binoutput_file = pars.binoutput_file;
+    // config.restart = pars.restart;
+    // config.grid_file = pars.grid_file;
+    // config.pre_grid = pars.pre_grid;
+    // config.grid_in_file = pars.grid_in_file;
+
+    // config.ncell = config.p_intensity + config.sink_points;
+    // config.radius_squ = config.radius * config.radius;
+    // config.min_scale_squ = config.min_scale * config.min_scale;
+    // config.n_solve_iters_done = 0;
+    // config.use_abun = true;
+    // config.data_flags = 0;
+
+    // config.grid_density_global_max = 1.;
+    // config.num_densities = 0;
+
+    // if !config.do_pregrid || config.restart {
+    //     config.num_densities = 0;
+    //     if let Some(grid_file) = &config.grid_file {
+    //         if let Err(e) = count_density_columns();
+    //     }
+    // }
 }
 
 // Define a struct to hold the configuration
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ConfigParams {
     pub radius: f64,
     pub min_scale: f64,
@@ -43,7 +104,7 @@ pub struct ConfigParams {
     pub binoutput_file: String,
     pub grid_file: String,
     pub pre_grid: String,
-    pub restart: String,
+    pub restart: bool,
     pub dust: String,
     pub grid_in_file: String,
     pub reset_rng: bool,
@@ -56,7 +117,7 @@ pub struct ConfigParams {
     pub n_images: i32,
     pub n_species: i32,
     pub num_densities: i32,
-    pub do_pregrid: i32,
+    pub do_pregrid: bool,
     pub num_grid_density_maxima: i32,
     pub num_dims: i32,
     pub n_line_images: i32,
