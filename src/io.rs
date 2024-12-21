@@ -2,6 +2,7 @@ use serde_derive::Deserialize;
 use std::fs;
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(default)] // This ensures `Default::default()` is used for missing fields.
 pub struct InputParams {
     pub radius: f64,
     pub min_scale: f64,
@@ -22,7 +23,7 @@ pub struct InputParams {
     pub binoutput_file: String,
     pub grid_file: String,
     pub pre_grid: String,
-    pub restart: String,
+    pub restart: bool,
     pub dust: String,
     pub grid_in_file: String,
     pub reset_rng: bool,
@@ -33,12 +34,13 @@ pub struct InputParams {
     pub collisional_partner_mol_weights: Vec<f64>,
     pub collisional_partner_ids: Vec<f64>,
     pub grid_data_file: Vec<f64>,
-    pub mol_data_file: Vec<f64>,
-    pub collisional_partner_names: Vec<f64>,
+    pub mol_data_file: Vec<String>,
+    pub collisional_partner_names: Vec<String>,
     pub grid_out_files: Vec<f64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(default)] // This ensures `Default::default()` is used for missing fields.
 pub struct Image {
     pub nchan: i32,
     pub trans: i32,
