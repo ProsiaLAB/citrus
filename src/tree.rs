@@ -6,7 +6,6 @@ use crate::{config::ConfigInfo, dims};
 pub const N_RANDOMS: usize = 10000;
 pub const MAX_RECURSION: usize = 100;
 
-// TODO: Implement the following struct
 pub struct TreeRandomConstantType {
     pub par: ConfigInfo,
     pub random_gen_type: GSLRngType,
