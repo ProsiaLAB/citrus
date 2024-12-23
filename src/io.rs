@@ -1,4 +1,5 @@
 use serde_derive::Deserialize;
+use std::collections::HashMap;
 use std::fs;
 
 #[derive(Debug, Default, Deserialize)]
@@ -72,7 +73,7 @@ impl Image {
 pub struct Config {
     pub parameters: InputParams,
     #[serde(flatten)]
-    pub images: std::collections::HashMap<String, Image>,
+    pub images: HashMap<String, Image>,
 }
 
 impl Config {
