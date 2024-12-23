@@ -152,7 +152,7 @@ pub fn run(path: &str) {
 
     // Extract parameters now that we are outside the match block
     let pars = input_data.parameters;
-    let config = config::ConfigParams::default();
+    let config = config::ConfigInfo::default();
 
     let imgs = input_data.images;
     println!("Images: {:?}", imgs);
