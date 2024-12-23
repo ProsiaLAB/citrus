@@ -1,0 +1,188 @@
+use crate::dims;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+// Define error types for the raytrace module
+pub enum RayThroughCellsError {
+    SVDFail,
+    NonSpan,
+    LUDecompFail,
+    LUSolveFail,
+    TooManyEntry,
+    UnknownError,
+    NotFound,
+}
+
+/// NOTE: it is assumed that `vertex[i]` is opposite the face that abuts with
+/// * `neigh[i]` for all `i`.
+#[derive(Debug)]
+pub struct Simplex<'a> {
+    pub id: u64,
+    pub vertex: Vec<u64>,
+    pub centres: Vec<f64>,
+    pub neigh: Vec<Option<&'a Simplex<'a>>>,
+}
+
+impl<'a> Simplex<'a> {
+    /// Constructor for Simplex
+    pub fn new(id: u64) -> Self {
+        Simplex {
+            id,
+            vertex: vec![0; dims::N_DIMS + 1],
+            centres: vec![0.0; dims::N_DIMS],
+            neigh: vec![None; dims::N_DIMS + 1],
+        }
+    }
+
+    /// Set a specific neighbor
+    pub fn set_neighbor(&mut self, index: usize, neighbor: Option<&'a Simplex<'a>>) {
+        if index < self.neigh.len() {
+            self.neigh[index] = neighbor;
+        } else {
+            panic!("Index out of bounds for neighbor array!");
+        }
+    }
+}
+
+/// This struct is meant to record all relevant information about the
+/// intersection between a ray (defined by a direction unit vector 'dir' and a
+/// starting position 'r') and a face of a simplex.
+#[derive(Debug)]
+pub struct IntersectType {
+    /// The index (in the range {0...N}) of the face (and thus of the opposite
+    /// vertex, i.e. the one 'missing' from the bary[] list of this face).
+    pub fi: i32,
+    /// >0 means the ray exits, < 0 means it enters, == 0 means the
+    /// face is parallel to the ray.
+    pub orientation: i32,
+    pub bary: Vec<f64>,
+    /// `dist` is defined via `r_int = r + dist*dir`.
+    pub dist: f64,
+    /// `coll_par` is a measure of how close to any edge of the face `r_int`
+    /// lies.
+    pub coll_par: f64,
+}
+
+impl IntersectType {
+    /// Constructor for IntersectType
+    pub fn new(fi: i32, orientation: i32, dist: f64, coll_par: f64) -> Self {
+        IntersectType {
+            fi,
+            orientation,
+            bary: vec![0.0; dims::N_DIMS],
+            dist,
+            coll_par,
+        }
+    }
+
+    /// Set barycentric coordinates.
+    pub fn set_bary(&mut self, values: Vec<f64>) {
+        if values.len() == dims::N_DIMS {
+            self.bary = values;
+        } else {
+            panic!("Dimension mismatch with bary coordinates!");
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FaceType {
+    /// `r` is a list of the the `N` vertices of the face, each of which has `N`
+    /// cartesian components.
+    pub r: Vec<Vec<f64>>,
+    /// `simplex_centres` is a convenience pointer array which gives
+    /// the location of the geometric centres of the simplexes.
+    pub simplex_centres: Vec<f64>,
+}
+
+#[derive(Debug)]
+pub struct FacePlusBasisType {
+    pub axes: Vec<Vec<f64>>,
+    ///  `r` expresses the location of the N vertices of a simplicial polytope face
+    /// in N-space, in terms of components along the N-1 orthogonal axes in the
+    /// sub-plane of the face. Thus you should malloc r as r[N][N-1].
+    pub r: Vec<Vec<f64>>,
+    pub origin: Vec<f64>,
+}
+
+impl FacePlusBasisType {
+    /// Constructor for `FacePlusBasisType`, initializes vectors dynamically based on `dims::N_DIMS`.
+    pub fn new() -> Self {
+        let n_dims = dims::N_DIMS;
+        FacePlusBasisType {
+            axes: vec![vec![0.0; n_dims]; n_dims - 1],
+            r: vec![vec![0.0; n_dims - 1]; n_dims],
+            origin: vec![0.0; n_dims],
+        }
+    }
+
+    /// Set a specific axis value.
+    pub fn set_axis(&mut self, axis_index: usize, component_index: usize, value: f64) {
+        if axis_index < dims::N_DIMS - 1 && component_index < dims::N_DIMS {
+            self.axes[axis_index][component_index] = value;
+        } else {
+            panic!("Index out of bounds for axes array!");
+        }
+    }
+
+    /// Set a specific vertex value in `r`.
+    pub fn set_vertex(&mut self, vertex_index: usize, component_index: usize, value: f64) {
+        if vertex_index < dims::N_DIMS && component_index < dims::N_DIMS - 1 {
+            self.r[vertex_index][component_index] = value;
+        } else {
+            panic!("Index out of bounds for vertices array!");
+        }
+    }
+
+    /// Set the origin.
+    pub fn set_origin(&mut self, values: Vec<f64>) {
+        if values.len() == dims::N_DIMS {
+            self.origin = values;
+        } else {
+            panic!("Dimension mismatch with origin!");
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FaceListType {
+    /// A collection of faces.
+    pub faces: Vec<Rc<RefCell<FaceType>>>,
+    /// A collection of optional references to the faces, up to `N_DIMS + 1`.
+    pub face_ptrs: Vec<Option<Rc<RefCell<FaceType>>>>,
+}
+
+impl FaceListType {
+    /// Constructor for `FaceListType`, initializes the struct with empty vectors.
+    pub fn new(num_faces: usize) -> Self {
+        FaceListType {
+            faces: Vec::with_capacity(num_faces),
+            face_ptrs: vec![None; dims::N_DIMS + 1],
+        }
+    }
+
+    /// Adds a new face to the face list.
+    pub fn add_face(&mut self, face: FaceType) -> Rc<RefCell<FaceType>> {
+        let face_rc = Rc::new(RefCell::new(face));
+        self.faces.push(face_rc.clone());
+        face_rc
+    }
+
+    /// Sets a reference to a face in the `face_ptrs` array.
+    pub fn set_face_ptr(&mut self, index: usize, face: Option<Rc<RefCell<FaceType>>>) {
+        if index < dims::N_DIMS + 1 {
+            self.face_ptrs[index] = face;
+        } else {
+            panic!("Index out of bounds for face pointers!");
+        }
+    }
+
+    /// Gets a face reference at a given index in the `face_ptrs` array.
+    pub fn get_face_ptr(&self, index: usize) -> Option<Rc<RefCell<FaceType>>> {
+        if index < self.face_ptrs.len() {
+            self.face_ptrs[index].clone()
+        } else {
+            None
+        }
+    }
+}
