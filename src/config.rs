@@ -1,5 +1,5 @@
 #[derive(Default, Debug)]
-pub struct ConfigParams {
+pub struct ConfigInfo {
     pub radius: f64,
     pub min_scale: f64,
     pub cmb_temp: f64,
