@@ -1,3 +1,5 @@
+use crate::NUM_OF_GRID_STAGES;
+
 #[derive(Default, Debug)]
 pub struct ConfigInfo {
     pub radius: f64,
@@ -47,12 +49,12 @@ pub struct ConfigInfo {
     pub edge_vels_available: bool,
     pub nmol_weights: Vec<f64>,
     pub grid_density_max_locations: Vec<[f64; 3]>,
-    pub grid_density_max_values: Vec<[f64; 3]>,
+    pub grid_density_max_values: Vec<f64>,
     pub collisional_partner_mol_weights: Vec<f64>,
-    pub collisional_partner_ids: Vec<f64>,
+    pub collisional_partner_ids: Vec<i64>,
     pub grid_data_file: Vec<f64>,
-    pub mol_data_file: Vec<f64>,
-    pub collisional_partner_names: Vec<f64>,
-    pub grid_out_files: Vec<f64>,
-    pub write_grid_at_stage: Vec<f64>,
+    pub mol_data_file: Vec<String>,
+    pub collisional_partner_names: Vec<String>,
+    pub grid_out_files: Vec<String>,
+    pub write_grid_at_stage: [f64; NUM_OF_GRID_STAGES],
 }

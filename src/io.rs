@@ -31,13 +31,13 @@ pub struct InputParams {
     pub do_solve_rte: bool,
     pub nmol_weights: Vec<f64>,
     pub grid_density_max_locations: Vec<[f64; 3]>,
-    pub grid_density_max_values: Vec<[f64; 3]>,
+    pub grid_density_max_values: Vec<f64>,
     pub collisional_partner_mol_weights: Vec<f64>,
-    pub collisional_partner_ids: Vec<f64>,
-    pub grid_data_file: Vec<f64>,
+    pub collisional_partner_ids: Vec<i64>,
+    pub grid_data_file: Vec<String>,
     pub mol_data_file: Vec<String>,
     pub collisional_partner_names: Vec<String>,
-    pub grid_out_files: Vec<f64>,
+    pub grid_out_files: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
