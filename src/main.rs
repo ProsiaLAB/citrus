@@ -1,7 +1,10 @@
-use citrus::{run, source};
+use citrus::run;
 use std::env;
+use std::error::Error;
+use std::fs;
+use std::process;
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     // Collect command line arguments
     let args: Vec<String> = env::args().skip(1).collect();
 
@@ -12,7 +15,25 @@ fn main() {
     }
 
     let path = &args[0];
-    let trig = source::stokes_angles(&mut [0.2; 3], [[1.3; 3]; 3], &mut [0.9; 3]);
-    println!("{:?}", trig);
-    // run(path);
+
+    // Try to get the absolute path and handle errors properly
+    let path = match fs::canonicalize(path) {
+        Ok(p) => p, // Successfully resolved to an absolute path
+        Err(e) => {
+            eprintln!("Error resolving the path '{}': {}", path, e);
+            process::exit(1); // Exit with failure code
+        }
+    };
+
+    // Ensure the path exists after resolving it
+    if !path.exists() {
+        eprintln!("The path '{}' does not exist.", path.display());
+        process::exit(1); // Exit with failure code
+    }
+
+    run(path.to_str().unwrap_or_else(|| {
+        eprintln!("Error: The canonicalized path is not valid UTF-8.");
+        process::exit(1);
+    }))?;
+    Ok(())
 }
