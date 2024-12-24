@@ -31,14 +31,14 @@ pub struct TreeRandomConstantType {
     pub monitor_fn: Option<
         Box<
             dyn Fn(
-                i32,                // num_dims
-                i32,                // cell_i
-                [f64; N_DIMS],      // field_origin
-                [f64; N_DIMS],      // field_width
-                u32,                // desired_num_points
-                Vec<[f64; N_DIMS]>, // out_random_locs
-                u32,                // first_point_i
-                u32,                // actual_num_points
+                i32,                      // num_dims
+                i32,                      // cell_i
+                [f64; dims::N_DIMS],      // field_origin
+                [f64; dims::N_DIMS],      // field_width
+                u32,                      // desired_num_points
+                Vec<[f64; dims::N_DIMS]>, // out_random_locs
+                u32,                      // first_point_i
+                u32,                      // actual_num_points
             ),
         >,
     >,
