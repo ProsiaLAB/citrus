@@ -1,3 +1,5 @@
+use std::error::Error;
+
 /// This function rotates the B-field vector from the model frame to the observer
 /// frame, then calculates and returns some useful values which will in function
 /// `source_fn_polarized()` make it easy to obtain the Stokes parameters of polarized
@@ -44,7 +46,7 @@ pub fn stokes_angles(
     mag_field: &mut [f64; 3],
     rotation_matrix: [[f64; 3]; 3],
     trig_fncs: &mut [f64],
-) -> Result<(), String> {
+) -> Result<(), Box<dyn Error>> {
     let ndim = 3;
     let b_p = &mut [0.0; 3];
 
@@ -62,7 +64,7 @@ pub fn stokes_angles(
         trig_fncs[0] = 0.;
         trig_fncs[1] = 0.;
         trig_fncs[2] = 0.;
-        return Err("B field is zero".to_string());
+        return Err("B field is zero".into());
     }
 
     let b_squared = b_xy_squared + b_p[2] * b_p[2];
