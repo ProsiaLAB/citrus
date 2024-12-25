@@ -1,5 +1,5 @@
-use io::Config;
 use std::fs;
+use std::process::exit;
 use std::{error::Error, path::Path};
 pub mod config;
 pub mod constants;
@@ -12,6 +12,9 @@ pub mod solver;
 pub mod source;
 pub mod tree;
 pub mod utils;
+
+use crate::config::ConfigInfo;
+use crate::io::Config;
 
 pub const MAX_NUM_OF_SPECIES: usize = 100;
 pub const MAX_NUM_OF_IMAGES: usize = 100;

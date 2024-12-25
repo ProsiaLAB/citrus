@@ -2,7 +2,7 @@ use serde_derive::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(default)] // This ensures `Default::default()` is used for missing fields.
 pub struct InputParams {
     pub radius: f64,

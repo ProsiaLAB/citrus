@@ -1,6 +1,6 @@
 use crate::NUM_OF_GRID_STAGES;
 
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct ConfigInfo {
     pub radius: f64,
     pub min_scale: f64,
