@@ -1,5 +1,5 @@
 use std::fs;
-use std::process::exit;
+
 use std::{error::Error, path::Path};
 pub mod config;
 pub mod constants;
@@ -344,12 +344,34 @@ pub fn run(path: &str, par: &mut ConfigInfo, img: &mut ImageInfo) -> Result<(), 
     par.grid_density_global_max = 1.0;
     par.num_densities = 0;
 
-    // if !config.do_pregrid || config.restart {
-    //     config.num_densities = 0;
-    //     if let Some(grid_file) = &config.grid_file {
-    //         if let Err(e) = count_density_columns();
-    //     }
-    // }
+    let num_func_densities = 1; // Dummy value for now
+
+    if !par.do_pregrid || par.restart {
+        par.num_densities = 0;
+        if !par.grid_in_file.is_empty() {
+            // Read the grid file in FITS format
+            // TODO: Currently not implemented
+        }
+        if par.num_densities <= 0 {
+            // So here is the deal:
+            // LIME either asks to supply the number densities (basically from
+            // the grid file) or it calculates them a user defined function.
+            // These functions had to be written in C by the user.
+            // However, I want to do away from this and always ask for a file.
+            // Or if that becomes unfeasible, we can ask for parameters
+            // from which a function in 3-D space can be generated at runtime.
+            // This will be purely written in Rust; with parameters supplied
+            // by the user in the configuration file (TOML).
+
+            // For now, we will just set `num_densities` to 1.
+            par.num_densities = num_func_densities;
+
+            if par.num_densities <= 0 {
+                return Err("No density values returned".into());
+            }
+        }
+    }
+
     Ok(())
 }
 
