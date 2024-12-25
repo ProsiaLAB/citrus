@@ -103,6 +103,7 @@ pub struct Grid {
     pub cont: Vec<ContinuumLine>,
 }
 
+#[derive(Debug)]
 pub struct Spec {
     pub intense: Vec<f64>,
     pub tau: Vec<f64>,
@@ -110,6 +111,7 @@ pub struct Spec {
     pub num_rays: i64,
 }
 
+#[derive(Debug, Default)]
 pub struct ImageInfo {
     pub do_line: i64,
     pub nchan: i64,
@@ -136,6 +138,16 @@ pub struct ImageInfo {
     pub do_interpolate_vels: bool,
 }
 
+// impl Default for ImageInfo {
+//     fn default() -> Self {
+//         ImageInfo {
+//             do_line: 0,
+//             nchan: 0,
+//             ..ImageInfo::default()
+//         }
+//     }
+// }
+
 pub struct Cell {
     pub vertex: [Option<Box<Grid>>; dims::N_DIMS + 1],
     pub neigh: [Option<Box<Cell>>; dims::N_DIMS * 2],
@@ -143,15 +155,24 @@ pub struct Cell {
     pub centre: [f64; dims::N_DIMS],
 }
 
-pub fn run(path: &str) -> Result<(), Box<dyn Error>> {
+pub fn init() -> (config::ConfigInfo, ImageInfo) {
+    println!("===================================================================");
     println!("Welcome to citrus, A verstalie line modelling engine based on LIME.");
+    println!("===================================================================");
+
+    // Initialize parameter and image structures with default values
+    let par = config::ConfigInfo::default();
+    let img = ImageInfo::default();
+
+    return (par, img);
+}
+
+pub fn run(path: &str, par: &mut ConfigInfo, img: &mut ImageInfo) -> Result<(), Box<dyn Error>> {
     // Load the configuration file
-    println!("Loading configuration file: {}", path);
     let input_data = Config::from_toml_file(path)?;
 
     // Extract parameters now that we are outside the match block
     let inpars = input_data.parameters;
-    let mut par = config::ConfigInfo::default();
 
     let imgs = input_data.images;
 
@@ -239,13 +260,11 @@ pub fn run(path: &str) -> Result<(), Box<dyn Error>> {
                 match fs::metadata(&path) {
                     Ok(metadata) => {
                         if metadata.len() == 0 {
-                            println!("File {} is empty.", filename);
-                        } else {
-                            println!("File {} exists and is not empty.", filename);
+                            eprintln!("File {} is empty.", filename);
                         }
                     }
                     Err(err) => {
-                        println!("Error accessing file {}: {}", filename, err);
+                        eprintln!("Error accessing file {}: {}", filename, err);
                     }
                 }
             }
@@ -294,23 +313,35 @@ pub fn run(path: &str) -> Result<(), Box<dyn Error>> {
         .cloned()
         .collect::<Vec<[f64; 3]>>();
 
-    println!("{:?}", par.grid_density_max_values); // TODO: Set default values
-                                                   // totally forgot ::facepalm::
-
     let mut i = 0;
     while i < MAX_NUM_HIGH && par.grid_density_max_values[i] >= 0.0 {
         i += 1;
     }
     par.num_grid_density_maxima = i as i32;
-
     par.ncell = par.p_intensity + par.sink_points;
     par.radius_squ = par.radius * par.radius;
     par.min_scale_squ = par.min_scale * par.min_scale;
+    par.do_pregrid = !par.pre_grid.is_empty();
     par.n_solve_iters_done = 0;
     par.use_abun = true;
     par.data_flags = 0;
 
-    par.grid_density_global_max = 1.;
+    if par.grid_in_file.is_empty() {
+        if par.radius <= 0.0 {
+            return Err("Radius must be positive.".into());
+        }
+        if par.min_scale <= 0.0 {
+            return Err("Minimum scale must be positive.".into());
+        }
+        if par.p_intensity <= 0 {
+            return Err("Number of intensity points must be positive.".into());
+        }
+        if par.sink_points <= 0 {
+            return Err("Number of sink points must be positive.".into());
+        }
+    }
+
+    par.grid_density_global_max = 1.0;
     par.num_densities = 0;
 
     // if !config.do_pregrid || config.restart {
