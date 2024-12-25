@@ -5,6 +5,8 @@ use std::fs;
 use std::process;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let (mut par, mut img) = init();
+
     // Collect command line arguments
     let args: Vec<String> = env::args().skip(1).collect();
 
@@ -31,9 +33,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         process::exit(1); // Exit with failure code
     }
 
-    run(path.to_str().unwrap_or_else(|| {
-        eprintln!("Error: The canonicalized path is not valid UTF-8.");
-        process::exit(1);
-    }))?;
+    run(
+        path.to_str().unwrap_or_else(|| {
+            eprintln!("Error: The canonicalized path is not valid UTF-8.");
+            process::exit(1);
+        }),
+        &mut par,
+        &mut img,
+    )?;
     Ok(())
 }
