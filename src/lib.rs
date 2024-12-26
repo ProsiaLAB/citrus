@@ -31,6 +31,8 @@ pub const MAX_NUM_HIGH: usize = 10; // ??? What this bro?
 
 pub const FIX_RANDOM_SEEDS: bool = false;
 
+pub const NUM_RANDOM_DENS: usize = 100;
+
 pub struct CollisionalPartnerData {
     pub down: Vec<f64>,
     pub temp: Vec<f64>,
@@ -449,7 +451,44 @@ pub fn run(path: &str, par: &mut ConfigInfo, _img: &mut ImageInfo) -> Result<(),
                             );
                         }
                         println!("Random number generator initialized.");
+                        let mut found_good_value = false;
+                        for _ in 0..NUM_RANDOM_DENS as usize {
+                            for i in 0..dims::N_DIMS {
+                                r[i] = par.radius * (2.0 * GSLRng::uniform(&mut rand_gen) - 1.0);
+                            }
+                            temp_point_density = grid_density(
+                                &mut r,
+                                par.radius_squ,
+                                par.num_densities,
+                                par.grid_density_global_max,
+                            );
+                            if !temp_point_density.is_infinite()
+                                && !temp_point_density.is_nan()
+                                && temp_point_density > 0.0
+                            {
+                                found_good_value = true;
+                                break;
+                            }
+                        }
+                        if found_good_value {
+                            if temp_point_density > par.grid_density_global_max {
+                                par.grid_density_global_max = temp_point_density;
+                            }
+                        } else if par.num_grid_density_maxima > 0 {
+                            // Test any maxima that user might have provided
+                            par.grid_density_global_max = par.grid_density_max_values[0];
+                            for i in 1..par.num_grid_density_maxima as usize {
+                                if par.grid_density_max_values[i] > par.grid_density_global_max {
+                                    par.grid_density_global_max = par.grid_density_max_values[i];
+                                }
+                            }
+                        } else {
+                            return Err(
+                                "Could not find a non-pathological grid density value.".into()
+                            );
+                        }
                     }
+
                     None => {
                         eprintln!("Could not initialize random number generator.");
                     }
