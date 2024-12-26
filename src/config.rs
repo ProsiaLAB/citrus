@@ -56,5 +56,5 @@ pub struct ConfigInfo {
     pub mol_data_file: Vec<String>,
     pub collisional_partner_names: Vec<String>,
     pub grid_out_files: Vec<String>,
-    pub write_grid_at_stage: [f64; NUM_OF_GRID_STAGES],
+    pub write_grid_at_stage: [bool; NUM_OF_GRID_STAGES],
 }

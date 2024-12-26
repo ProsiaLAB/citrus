@@ -224,10 +224,9 @@ pub fn run(
         .grid_out_files
         .iter()
         .take(NUM_OF_GRID_STAGES)
-        .filter(|filename| !filename.is_empty())
         .cloned()
         .collect();
-    par.write_grid_at_stage.fill(0.0);
+    par.write_grid_at_stage.fill(false);
 
     if par.pre_grid.is_empty() && par.restart {
         par.n_species = 0;
@@ -504,7 +503,7 @@ pub fn run(
 
     for i in 0..NUM_OF_GRID_STAGES {
         if !par.grid_out_files[i].is_empty() {
-            par.write_grid_at_stage[i] = 1.0;
+            par.write_grid_at_stage[i] = true;
         }
     }
 

@@ -1,5 +1,7 @@
 use crate::constants::LOCAL_CMB_TEMP_SI;
-use crate::MAX_NUM_OF_COLLISIONAL_PARTNERS;
+use crate::{
+    MAX_NUM_HIGH, MAX_NUM_OF_COLLISIONAL_PARTNERS, MAX_NUM_OF_SPECIES, NUM_OF_GRID_STAGES,
+};
 use serde_derive::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -61,8 +63,8 @@ impl Default for InputParams {
             nmol_weights: vec![-1.0; MAX_NUM_OF_COLLISIONAL_PARTNERS],
             dust_weights: vec![-1.0; MAX_NUM_OF_COLLISIONAL_PARTNERS],
             collisional_partner_mol_weights: vec![-1.0; MAX_NUM_OF_COLLISIONAL_PARTNERS],
-            grid_density_max_values: vec![-1.0; MAX_NUM_OF_COLLISIONAL_PARTNERS],
-            grid_density_max_locations: vec![[0.0; 3]; MAX_NUM_OF_COLLISIONAL_PARTNERS],
+            grid_density_max_values: vec![-1.0; MAX_NUM_HIGH],
+            grid_density_max_locations: vec![[0.0; 3]; MAX_NUM_HIGH],
             cmb_temp: LOCAL_CMB_TEMP_SI,
             lte_only: 0,
             init_lte: 0,
@@ -76,9 +78,9 @@ impl Default for InputParams {
             ray_trace_algorithm: 0,
             reset_rng: false,
             do_solve_rte: false,
-            grid_out_files: vec![String::new(); 3],
-            mol_data_file: vec![String::new(); 3],
-            grid_data_file: vec![String::new(); 3],
+            grid_out_files: vec![String::new(); NUM_OF_GRID_STAGES],
+            mol_data_file: vec![String::new(); MAX_NUM_OF_SPECIES],
+            grid_data_file: vec![String::new(); MAX_NUM_OF_SPECIES],
             collisional_partner_names: vec![String::new(); MAX_NUM_OF_COLLISIONAL_PARTNERS],
         }
     }
