@@ -24,5 +24,7 @@ source_velocity = 0.0
 azimuth = 0.0
 inclination = 0.0
 position_angle = 0.0
+unit = 0
+filename = "image_01.fits"
 
 # Once can add more images by adding more sections like [image-##]
