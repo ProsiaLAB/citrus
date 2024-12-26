@@ -176,7 +176,12 @@ pub fn init() -> (config::ConfigInfo, ImageInfo) {
     return (par, img);
 }
 
-pub fn run(path: &str, par: &mut ConfigInfo, _img: &mut ImageInfo) -> Result<(), Box<dyn Error>> {
+pub fn run(
+    path: &str,
+    par: &mut ConfigInfo,
+    _img: &mut ImageInfo,
+    n_images: u32,
+) -> Result<(), Box<dyn Error>> {
     // Some variables to be used later
     let mut r: Vec<f64> = vec![0.0; 3];
     let mut temp_point_density: f64;
@@ -493,11 +498,41 @@ pub fn run(path: &str, par: &mut ConfigInfo, _img: &mut ImageInfo) -> Result<(),
                         eprintln!("Could not initialize random number generator.");
                     }
                 }
-
-                // let mut found_good_value = false;
             }
         }
     }
+
+    for i in 0..NUM_OF_GRID_STAGES {
+        if !par.grid_out_files[i].is_empty() {
+            par.write_grid_at_stage[i] = 1.0;
+        }
+    }
+
+    /*
+    Now we need to calculate the cutoff value used in `calc_source_fn()`. The issue is
+    to decide between
+
+      y = (1 - exp[-x])/x
+
+    or the approximation using the Taylor expansion of exp(-x), which to 3rd order
+    is
+
+      y ~ 1 - x/2 + x^2/6.
+
+    The cutoff will be the value of abs(x) for which the error in the exact
+    expression equals the next unused Taylor term, which is x^3/24. This error can
+    be shown to be given for small |x| by epsilon/|x|, where epsilon is the
+    floating-point precision of the computer. Hence the cutoff evaluates to
+
+      |x|_cutoff = (24*epsilon)^{1/4}.
+
+    */
+
+    let taylor_cutoff = (24.0 * f64::EPSILON).powf(0.25);
+    par.n_images = n_images;
+    par.num_dims = dims::N_DIMS;
+
+    // Copy over user set image parameters
 
     Ok(())
 }
