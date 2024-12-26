@@ -1,10 +1,14 @@
+use rgsl::rng::algorithms as GSLRngAlgorithms;
+use rgsl::Rng as GSLRng;
 use std::fs;
-
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{error::Error, path::Path};
 pub mod config;
 pub mod constants;
+pub mod defaults;
 pub mod dims;
 pub mod grid;
+pub mod interface;
 pub mod io;
 pub mod messages;
 pub mod raytrace;
@@ -14,6 +18,7 @@ pub mod tree;
 pub mod utils;
 
 use crate::config::ConfigInfo;
+use crate::defaults::grid_density;
 use crate::io::Config;
 
 pub const MAX_NUM_OF_SPECIES: usize = 100;
@@ -23,6 +28,8 @@ pub const MAX_NUM_OF_COLLISIONAL_PARTNERS: usize = 20;
 pub const TYPICAL_ISM_DENSITY: f64 = 1e3;
 pub const DENSITY_POWER: f64 = 0.2;
 pub const MAX_NUM_HIGH: usize = 10; // ??? What this bro?
+
+pub const FIX_RANDOM_SEEDS: bool = false;
 
 pub struct CollisionalPartnerData {
     pub down: Vec<f64>,
@@ -167,14 +174,18 @@ pub fn init() -> (config::ConfigInfo, ImageInfo) {
     return (par, img);
 }
 
-pub fn run(path: &str, par: &mut ConfigInfo, img: &mut ImageInfo) -> Result<(), Box<dyn Error>> {
+pub fn run(path: &str, par: &mut ConfigInfo, _img: &mut ImageInfo) -> Result<(), Box<dyn Error>> {
+    // Some variables to be used later
+    let mut r: Vec<f64> = vec![0.0; 3];
+    let mut temp_point_density: f64;
+
     // Load the configuration file
     let input_data = Config::from_toml_file(path)?;
 
     // Extract parameters now that we are outside the match block
     let inpars = input_data.parameters;
 
-    let imgs = input_data.images;
+    // let imgs = input_data.images;
 
     // Map pars to config
     par.radius = inpars.radius;
@@ -368,6 +379,83 @@ pub fn run(path: &str, par: &mut ConfigInfo, img: &mut ImageInfo) -> Result<(), 
 
             if par.num_densities <= 0 {
                 return Err("No density values returned".into());
+            }
+        }
+    }
+
+    if !par.do_pregrid || par.restart || !par.grid_in_file.is_empty() {
+        // In this case, we will need to calculate grid point locations,
+        // thus we will need to call the `grid_density()` function
+        // Again this implementation requires more thought.
+        // At this phase of development, we will just emulate the C code
+
+        // TODO: Impl `density()` function
+
+        // We need some sort of positive value for
+        // par.grid_density_global_max before calling the default `grid_density()`
+        par.grid_density_global_max = 1.0;
+
+        // First try `grid_density()` at the origin, where it is often the highest
+        temp_point_density = grid_density(
+            &mut r,
+            par.radius_squ,
+            par.num_densities,
+            par.grid_density_global_max,
+        );
+
+        // Some sanity checks
+        if temp_point_density.is_infinite() || temp_point_density.is_nan() {
+            eprintln!("There is a singularity in the grid density function.");
+        } else if temp_point_density <= 0.0 {
+            eprintln!("The grid density function is zero at the origin.");
+        } else if temp_point_density >= par.grid_density_global_max {
+            par.grid_density_global_max = temp_point_density;
+        }
+
+        // Make things work somehow
+        if temp_point_density.is_infinite()
+            || temp_point_density.is_nan()
+            || temp_point_density <= 0.0
+        {
+            for i in 0..dims::N_DIMS {
+                r[i] = par.min_scale;
+            }
+            temp_point_density = grid_density(
+                &mut r,
+                par.radius_squ,
+                par.num_densities,
+                par.grid_density_global_max,
+            );
+
+            if !temp_point_density.is_infinite()
+                && !temp_point_density.is_nan()
+                && temp_point_density > 0.0
+            {
+                par.grid_density_global_max = temp_point_density;
+            } else {
+                // Hmm ok, let's try a spread of random locations
+                let rand_gen_opt = GSLRng::new(GSLRngAlgorithms::ranlxs2());
+
+                match rand_gen_opt {
+                    Some(mut rand_gen) => {
+                        if FIX_RANDOM_SEEDS {
+                            rand_gen.set(140978);
+                        } else {
+                            rand_gen.set(
+                                SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .expect("Time went backwards")
+                                    .as_secs() as usize,
+                            );
+                        }
+                        println!("Random number generator initialized.");
+                    }
+                    None => {
+                        eprintln!("Could not initialize random number generator.");
+                    }
+                }
+
+                // let mut found_good_value = false;
             }
         }
     }
