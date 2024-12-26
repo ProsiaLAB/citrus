@@ -1,10 +1,10 @@
 // Temporary module to define user-facing functions
 // which serve as the interface to the `citrus` engine.
 
-use crate::constants;
+use crate::constants as cc;
 
 pub fn density(x: f64, y: f64, z: f64) -> f64 {
-    let r_min = 0.7 * constants::AU_SI;
+    let r_min = 0.7 * cc::AU_SI;
     let r_to_use: f64;
 
     // Calculate radial distance from origin
@@ -18,7 +18,7 @@ pub fn density(x: f64, y: f64, z: f64) -> f64 {
     }
 
     // Get density after converting to SI units
-    let rho = 1.5e6 * (r_to_use / (300.0 * constants::AU_SI)).powf(-1.5) * 1e6;
+    let rho = 1.5e6 * (r_to_use / (300.0 * cc::AU_SI)).powf(-1.5) * 1e6;
 
     return rho;
 }
@@ -68,7 +68,7 @@ pub fn doppler() -> f64 {
 }
 
 pub fn velocity(x: f64, y: f64, z: f64) -> [f64; 3] {
-    let r_min = 0.1 * constants::AU_SI;
+    let r_min = 0.1 * cc::AU_SI;
     let r_to_use: f64;
 
     // Calculate radial distance from origin
@@ -81,7 +81,7 @@ pub fn velocity(x: f64, y: f64, z: f64) -> [f64; 3] {
     }
 
     // Free-fall velocity in the radial direction onto a central mass of 1 solar mass
-    let free_fall_velocity = (2.0 * constants::GRAVITATIONAL_CONST_SI * 1.989e30 / r_to_use).sqrt();
+    let free_fall_velocity = (2.0 * cc::GRAVITATIONAL_CONST_SI * 1.989e30 / r_to_use).sqrt();
 
     let vel = [
         -x * free_fall_velocity / r_to_use,
