@@ -22,3 +22,4 @@ pub const GRAVITATIONAL_CONST_CGS: f64 = GRAVITATIONAL_CONST_SI * 1000.0; // gra
 pub const AU_CGS: f64 = AU_SI * 100.0; // astronomical unit            [cm]		*/
 pub const SOLAR_MASS_CGS: f64 = SOLAR_MASS_SI * 1000.0; // Solar mass                   [g]		*/
 pub const SOLAR_RADIUS_CGS: f64 = SOLAR_RADIUS_SI * 100.0; // Solar radius                 [cm]		*/
+pub const CITRUS_EPS: f64 = 1e-30; // Small number to avoid division by zero	*/
