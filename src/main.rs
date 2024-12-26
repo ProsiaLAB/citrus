@@ -40,6 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }),
         &mut par,
         &mut img,
+        1,
     )?;
     Ok(())
 }
