@@ -1,11 +1,15 @@
-use citrus::{init, run};
+use citrus::load_config;
+use citrus::messages;
+use citrus::parse_config;
+use citrus::run;
 use std::env;
 use std::error::Error;
 use std::fs;
 use std::process;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (mut par, mut img) = init();
+    messages::greetings();
+    // messages::description();
 
     // Collect command line arguments
     let args: Vec<String> = env::args().skip(1).collect();
@@ -33,14 +37,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         process::exit(1); // Exit with failure code
     }
 
-    run(
-        path.to_str().unwrap_or_else(|| {
-            eprintln!("Error: The canonicalized path is not valid UTF-8.");
-            process::exit(1);
-        }),
-        &mut par,
-        &mut img,
-        1,
-    )?;
+    // Load the TOML file
+    let input_config = load_config(path.to_str().unwrap_or_else(|| {
+        eprintln!("Error: The canonicalized path is not valid UTF-8.");
+        process::exit(1);
+    }))?;
+
+    // Parse the loaded `Config` struct
+    let (mut par, mut img) = parse_config(input_config)?;
+
+    run(&mut par, &mut img)?;
     Ok(())
 }

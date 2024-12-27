@@ -1,8 +1,12 @@
+use std::collections::HashMap;
+use std::error::Error;
+use std::fs;
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use rgsl::rng::algorithms as GSLRngAlgorithms;
 use rgsl::Rng as GSLRng;
-use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::{error::Error, path::Path};
+
 pub mod config;
 pub mod constants;
 pub mod defaults;
@@ -131,12 +135,12 @@ pub struct ImageInfo {
     pub img_res: f64,
     pub pxls: i64,
     pub units: String,
-    pub img_units: Vec<i64>,
+    pub img_units: Vec<i32>,
     pub num_units: i64,
     pub freq: f64,
     pub bandwidth: f64,
     pub filename: String,
-    pub source_val: f64,
+    pub source_velocity: f64,
     pub theta: f64,
     pub phi: f64,
     pub incl: f64,
@@ -164,35 +168,30 @@ pub struct Cell {
     pub centre: [f64; dims::N_DIMS],
 }
 
-pub fn init() -> (config::ConfigInfo, ImageInfo) {
-    println!("===================================================================");
-    println!("Welcome to citrus, A verstalie line modelling engine based on LIME.");
-    println!("===================================================================");
-
-    // Initialize parameter and image structures with default values
-    let par = config::ConfigInfo::default();
-    let img = ImageInfo::default();
-
-    return (par, img);
+pub fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
+    let input_config = Config::from_toml_file(path)?;
+    Ok(input_config)
 }
 
-pub fn run(
-    path: &str,
-    par: &mut ConfigInfo,
-    _img: &mut ImageInfo,
-    n_images: u32,
-) -> Result<(), Box<dyn Error>> {
+pub fn parse_config(
+    input_config: Config,
+) -> Result<(ConfigInfo, HashMap<String, ImageInfo>), Box<dyn Error>> {
+    // Extract the parameters and images from the parsed TOML file
+    let inpars = input_config.parameters;
+
+    let inimgs = input_config.images;
+    let n_images = inimgs.len() as u32;
+
     // Some variables to be used later
     let mut r: Vec<f64> = vec![0.0; 3];
     let mut temp_point_density: f64;
 
-    // Load the configuration file
-    let input_data = Config::from_toml_file(path)?;
+    let mut par = config::ConfigInfo::default();
+    let mut imgs: HashMap<String, ImageInfo> = HashMap::new();
 
-    // Extract parameters now that we are outside the match block
-    let inpars = input_data.parameters;
-
-    // let imgs = input_data.images;
+    for (key, _) in &inimgs {
+        imgs.insert(key.clone(), ImageInfo::default());
+    }
 
     // Map pars to config
     par.radius = inpars.radius;
@@ -532,7 +531,51 @@ pub fn run(
     par.num_dims = dims::N_DIMS;
 
     // Copy over user set image parameters
+    if n_images > 0 {
+        for (key, _) in &inimgs {
+            if let Some(img) = imgs.get_mut(key) {
+                img.nchan = inimgs[key].nchan;
+                img.trans = inimgs[key].trans;
+                img.mol_i = inimgs[key].mol_i;
+                img.vel_res = inimgs[key].vel_res;
+                img.img_res = inimgs[key].img_res;
+                img.pxls = inimgs[key].pxls;
+                img.units = inimgs[key].units.clone();
+                img.freq = inimgs[key].freq;
+                img.bandwidth = inimgs[key].bandwidth;
+                img.filename = inimgs[key].filename.clone();
+                img.source_velocity = inimgs[key].source_velocity;
+                img.theta = inimgs[key].theta;
+                img.phi = inimgs[key].phi;
+                img.incl = inimgs[key].inclination;
+                img.posang = inimgs[key].position_angle;
+                img.azimuth = inimgs[key].azimuth;
+                img.distance = inimgs[key].distance;
+                img.do_interpolate_vels = inimgs[key].do_interpolate_vels;
+            }
+        }
+    }
 
+    // Allocate pixel space and parse image information
+    for (key, _) in &inimgs {
+        if let Some(img) = imgs.get_mut(key) {
+            if img.units.is_empty() {
+                img.num_units = 1; // 1 is Jy/pixel
+                img.img_units[0] = inimgs[key].unit;
+            } else {
+                /* Otherwise parse image units, populate imgunits array with appropriate
+                 * image identifiers and track number of units requested */
+                img.units = inimgs[key].units.clone();
+            }
+        }
+    }
+    Ok((par, imgs))
+}
+
+pub fn run(
+    _par: &mut ConfigInfo,
+    _img: &mut HashMap<String, ImageInfo>,
+) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
