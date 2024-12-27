@@ -22,6 +22,7 @@ pub mod tree;
 pub mod utils;
 
 use crate::config::ConfigInfo;
+use crate::constants as cc;
 use crate::defaults::grid_density;
 use crate::io::Config;
 
@@ -30,13 +31,13 @@ pub const MAX_NUM_OF_IMAGES: usize = 100;
 pub const NUM_OF_GRID_STAGES: usize = 5;
 pub const MAX_NUM_OF_COLLISIONAL_PARTNERS: usize = 20;
 pub const TYPICAL_ISM_DENSITY: f64 = 1e3;
-pub const DENSITY_POWER: f64 = 0.2;
 pub const MAX_NUM_HIGH: usize = 10; // ??? What this bro?
 
 pub const FIX_RANDOM_SEEDS: bool = false;
 
 pub const NUM_RANDOM_DENS: usize = 100;
 
+#[derive(Debug, Default)]
 pub struct CollisionalPartnerData {
     pub down: Vec<f64>,
     pub temp: Vec<f64>,
@@ -49,6 +50,7 @@ pub struct CollisionalPartnerData {
     pub name: String,
 }
 
+#[derive(Debug)]
 pub struct MolData {
     pub nlev: i64,
     pub nline: i64,
@@ -66,6 +68,29 @@ pub struct MolData {
     pub amass: f64,
     pub part: CollisionalPartnerData,
     pub mol_name: String,
+}
+
+impl Default for MolData {
+    fn default() -> Self {
+        MolData {
+            nlev: -1,
+            nline: -1,
+            npart: -1,
+            amass: -1.0,
+            part: CollisionalPartnerData::default(),
+            lal: Vec::new(),
+            lau: Vec::new(),
+            aeinst: Vec::new(),
+            freq: Vec::new(),
+            beinstu: Vec::new(),
+            beinstl: Vec::new(),
+            eterm: Vec::new(),
+            gstat: Vec::new(),
+            cmb: Vec::new(),
+            gir: Vec::new(),
+            mol_name: String::new(),
+        }
+    }
 }
 
 pub struct Point {
@@ -116,7 +141,7 @@ pub struct Grid {
     pub cont: Vec<ContinuumLine>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct Spec {
     pub intense: Vec<f64>,
     pub tau: Vec<f64>,
@@ -126,7 +151,7 @@ pub struct Spec {
 
 #[derive(Debug, Default)]
 pub struct ImageInfo {
-    pub do_line: i64,
+    pub do_line: bool,
     pub nchan: i64,
     pub trans: i64,
     pub mol_i: i64,
@@ -175,7 +200,7 @@ pub fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
 
 pub fn parse_config(
     input_config: Config,
-) -> Result<(ConfigInfo, HashMap<String, ImageInfo>), Box<dyn Error>> {
+) -> Result<(ConfigInfo, HashMap<String, ImageInfo>, Option<Vec<MolData>>), Box<dyn Error>> {
     // Extract the parameters and images from the parsed TOML file
     let inpars = input_config.parameters;
 
@@ -185,6 +210,7 @@ pub fn parse_config(
     // Some variables to be used later
     let mut r: Vec<f64> = vec![0.0; 3];
     let mut temp_point_density: f64;
+    let mut aux_rotation_matrix: [[f64; 3]; 3];
 
     let mut par = config::ConfigInfo::default();
     let mut imgs: HashMap<String, ImageInfo> = HashMap::new();
@@ -526,7 +552,7 @@ pub fn parse_config(
 
     */
 
-    let taylor_cutoff = (24.0 * f64::EPSILON).powf(0.25);
+    par.taylor_cutoff = (24.0 * f64::EPSILON).powf(0.25);
     par.n_images = n_images;
     par.num_dims = dims::N_DIMS;
 
@@ -561,20 +587,300 @@ pub fn parse_config(
         if let Some(img) = imgs.get_mut(key) {
             if img.units.is_empty() {
                 img.num_units = 1; // 1 is Jy/pixel
-                img.img_units[0] = inimgs[key].unit;
+
+                // Need to allocate space for the pixel data
+                img.img_units.push(inimgs[key].unit);
             } else {
                 /* Otherwise parse image units, populate imgunits array with appropriate
                  * image identifiers and track number of units requested */
-                img.units = inimgs[key].units.clone();
+                let separator = " ,:_";
+                // Check if `units` exist
+                let units_str = img.units.clone();
+                let tokens: Vec<&str> = units_str.split(separator).collect();
+                img.img_units.clear();
+                img.num_units = 0;
+
+                for (_, token) in tokens.iter().enumerate() {
+                    // Try parsing each token as an integer
+                    match token.trim().parse::<i32>() {
+                        Ok(unit) => {
+                            img.img_units.push(unit);
+                        }
+                        Err(_) => {
+                            return Err("Could not parse image units.".into());
+                        }
+                    }
+                }
+                img.num_units = img.img_units.len() as i64;
+            }
+
+            if img.nchan == 0 && img.vel_res < 0.0 {
+                // User has set neither `nchan` nor `vel_res`
+                // One of the two are required for a line image
+                // Therefore, we assume continuum image
+                if par.polarization {
+                    img.nchan = 3;
+                } else {
+                    img.nchan = 1;
+                }
+                if img.freq < 0.0 {
+                    return Err("You must set a frequency for continuum image.".into());
+                }
+                if img.trans > -1 || img.bandwidth > -1.0 {
+                    let msg = format!(
+                        "WARNING: Image {} is a continuum image, but has line parameters set. \
+                        These will be ignored.",
+                        key
+                    );
+                    eprintln!("{}", msg);
+                    img.do_line = false;
+                }
+            } else {
+                // User has set either `nchan` or `vel_res`
+                // Therefore, we assume line image
+
+                /*
+                For a valid line image, the user must set one of the following pairs:
+                bandwidth, velres (if they also set nchan, this is overwritten)
+                bandwidth, nchan (if they also set velres, this is overwritten)
+                velres, nchan (if they also set bandwidth, this is overwritten)
+
+                The presence of one of these combinations at least is checked here, although the
+                actual calculation is done in raytrace(), because it depends on moldata info
+                which we have not yet got.
+                */
+                if img.bandwidth > 0.0 && img.vel_res > 0.0 {
+                    if img.nchan > 0 {
+                        let msg = format!(
+                            "WARNING: Image {} has both bandwidth and velres set. \
+                            nchan will be overwritten.",
+                            key
+                        );
+                        eprintln!("{}", msg);
+                    }
+                } else if img.nchan <= 0 || img.bandwidth <= 0.0 && img.vel_res <= 0.0 {
+                    return Err(
+                        "You must set either nchan, bandwidth, or velres for a line image.".into(),
+                    );
+                }
+                // Check that we have keywords which allow us to calculate the image
+                // frequency (if necessary) after reading in the moldata file:
+                if img.trans > -1 {
+                    // User has set of `trans`, posssibly also `freq`
+                    if img.freq > 0.0 {
+                        let msg = format!(
+                            "WARNING: Image {} has `trans` set, `freq` will be ignored.",
+                            key
+                        );
+                        eprintln!("{}", msg);
+                    }
+                    if img.mol_i < 0 {
+                        if par.n_species > 1 {
+                            let msg = format!(
+                                "WARNING: Image {} did not have ``mol_i`` set, \
+                                Therefore, first molecule will be used.",
+                                key
+                            );
+                            eprintln!("{}", msg);
+                            img.mol_i = 0;
+                        }
+                    }
+                } else if img.freq < 0.0 {
+                    // User has not set `trans`, nor `freq`
+                    return Err("You must either set `trans` or `freq` for a line image (and optionally the `mol_i`".into());
+                } // else user has set `freq`
+                img.do_line = true;
+            } // End of check for line or continuum image
+            if img.img_res < 0.0 {
+                return Err("You must set image resolution.".into());
+            }
+            if img.pxls <= 0 {
+                return Err("You must set number of pixels.".into());
+            }
+            if img.distance <= 0.0 {
+                return Err("You must set distance to source.".into());
+            }
+            img.img_res = img.img_res * cc::ARCSEC_TO_RAD;
+            img.pixel = vec![Spec::default(); (img.pxls * img.pxls) as usize];
+            for spec in &mut img.pixel {
+                spec.intense = vec![0.0; img.nchan as usize];
+                spec.tau = vec![0.0; img.nchan as usize];
+            }
+
+            // Calculate the rotation matrix
+            /*
+            The image rotation matrix is used within traceray() to transform the coordinates
+            of a vector (actually two vectors - the ray direction and its starting point) as
+            initially specified in the observer-anchored frame into the coordinate frame of
+            the model. In linear algebra terms, the model-frame vector v_mod is related to
+            the vector v_obs as expressed in observer- (or image-) frame coordinates via the
+            image rotation matrix R by
+
+                v_mod = R * v_obs,				1
+
+            the multiplication being the usual matrix-vector style. Note that the ith row of
+            R is the ith axis of the model frame with coordinate values expressed in terms
+            of the observer frame.
+
+            The matrix R can be broken into a sequence of several (3 at least are needed for
+            full degrees of freedom) simpler rotations. Since these constituent rotations
+            are usually easier to conceive in terms of rotations of the model in the
+            observer framework, it is convenient to invert equation (1) to give
+
+                v_obs = R^T * v_mod,			2
+
+            where ^T here denotes transpose. Supposing now we rotate the model in a sequence
+            R_3^T followed by R_2^T followed by R_1^T, equation (2) can be expanded to give
+
+                v_obs = R_1^T * R_2^T * R_3^T * v_mod.	3
+
+            Inverting everything to return to the format of equation (1), which is what we
+            need, we find
+
+                v_mod = R_3 * R_2 * R_1 * v_obs.		4
+
+            LIME provides two different schemes of {R_1, R_2, R_3}: {PA, phi, theta} and
+            {PA, inclination, azimuth}. As an example, consider phi, which is a rotation of
+            the model from the observer Z axis towards the X. The matching obs->mod rotation
+            matrix is therefore
+
+                        ( cos(ph)  0  -sin(ph) )
+                        (                      )
+                R_phi = (    0     0     1     ).
+                        (                      )
+                        ( sin(ph)  0   cos(ph) )
+
+                */
+
+            let do_theta_phi = img.incl < -900.0 || img.azimuth < -900.0 || img.posang < -900.0;
+            if do_theta_phi {
+                // For the present position angle is not implemented
+                // for the theta/phi scheme, so we will just load the
+                // the identity matrix
+                img.rotation_matrix = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+            } else {
+                // Load position angle matrix
+                let cos_pa = img.posang.cos();
+                let sin_pa = img.posang.sin();
+                img.rotation_matrix = [
+                    [cos_pa, -sin_pa, 0.0],
+                    [sin_pa, cos_pa, 0.0],
+                    [0.0, 0.0, 1.0],
+                ];
+            }
+            if do_theta_phi {
+                // Load phi rotation matrix R_phi
+                let cos_phi = img.phi.cos();
+                let sin_phi = img.phi.sin();
+                aux_rotation_matrix = [
+                    [cos_phi, 0.0, -sin_phi],
+                    [0.0, 1.0, 0.0],
+                    [sin_phi, 0.0, cos_phi],
+                ];
+            } else {
+                // Load inclination matrix R_incl
+                let cos_incl = (img.incl + std::f64::consts::PI).cos();
+                let sin_incl = (img.incl + std::f64::consts::PI).sin();
+                aux_rotation_matrix = [
+                    [cos_incl, 0.0, -sin_incl],
+                    [0.0, 1.0, 0.0],
+                    [sin_incl, 0.0, cos_incl],
+                ];
+            }
+            // Multiply the two matrices
+            let mut temp_matrix = [[0.0; 3]; 3];
+            for i in 0..3 {
+                for j in 0..3 {
+                    temp_matrix[i][j] = 0.0;
+                    for k in 0..3 {
+                        temp_matrix[i][j] += img.rotation_matrix[i][k] * aux_rotation_matrix[k][j];
+                    }
+                }
             }
         }
     }
-    Ok((par, imgs))
+
+    par.n_line_images = 0;
+    par.n_cont_images = 0;
+    par.do_interpolate_vels = false;
+
+    for (key, _) in &inimgs {
+        if let Some(img) = imgs.get_mut(key) {
+            if img.do_line {
+                par.n_line_images += 1;
+            } else {
+                par.n_cont_images += 1;
+            }
+            if img.do_interpolate_vels {
+                par.do_interpolate_vels = true;
+            }
+        }
+    }
+
+    if par.n_cont_images > 0 {
+        if par.dust.is_empty() {
+            return Err("You must set dust parameters for continuum images.".into());
+        } else {
+            // Open the dust file and check if it exists if it does if it is empty
+            let path = Path::new(&par.dust);
+            if path.exists() {
+                match fs::metadata(&path) {
+                    Ok(metadata) => {
+                        if metadata.len() == 0 {
+                            eprintln!("File {} is empty.", par.dust);
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("Error accessing file {}: {}", par.dust, err);
+                    }
+                }
+            }
+        }
+    }
+
+    if par.n_line_images > 0 && par.ray_trace_algorithm == 0 && !par.do_pregrid {
+        par.use_vel_func_in_raytrace = true;
+    } else {
+        par.use_vel_func_in_raytrace = false;
+    }
+
+    par.edge_vels_available = false;
+
+    if par.lte_only {
+        if par.nsolve_iters > 0 {
+            let msg = "Requesting `nsolve_iters > 0` in LTE only mode \
+            will have no effect";
+            eprintln!("{}", msg);
+        } else if par.nsolve_iters <= par.n_solve_iters_done {
+            let msg = "Requesting `nsolve_iters <= n_solve_iters_done` in LTE only mode \
+            will have no effect";
+            eprintln!("{}", msg);
+        }
+    }
+
+    let mol_data: Option<Vec<MolData>>;
+
+    if par.n_species > 0 {
+        mol_data = defaults::mol_data(par.n_species);
+    } else {
+        mol_data = None;
+    }
+
+    // let mut default_density_power: f64;
+
+    // if par.sampling_algorithm == 0 {
+    //     default_density_power = defaults::DENSITY_EXP;
+    // } else {
+    //     default_density_power = defaults::TREE_EXP;
+    // }
+
+    Ok((par, imgs, mol_data))
 }
 
 pub fn run(
     _par: &mut ConfigInfo,
     _img: &mut HashMap<String, ImageInfo>,
+    _mol_data: &mut Option<Vec<MolData>>,
 ) -> Result<(), Box<dyn Error>> {
     Ok(())
 }

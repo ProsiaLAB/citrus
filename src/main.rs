@@ -44,8 +44,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }))?;
 
     // Parse the loaded `Config` struct
-    let (mut par, mut img) = parse_config(input_config)?;
+    let (mut par, mut img, mut mol_data) = parse_config(input_config)?;
 
-    run(&mut par, &mut img)?;
+    run(&mut par, &mut img, &mut mol_data)?;
     Ok(())
 }
