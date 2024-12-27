@@ -4,6 +4,7 @@ use crate::{
 };
 use serde_derive::Deserialize;
 use std::collections::HashMap;
+use std::error::Error;
 use std::fs;
 
 #[derive(Debug, Deserialize)]
@@ -86,15 +87,22 @@ impl Default for InputParams {
     }
 }
 
+/// The `Image` struct represents the configuration for an image to be generated.
+/// For the field `units`, we have the following mapping:
+/// 0: "Kelvin"
+/// 1: "Jansky per pixel"
+/// 2: SI units
+/// 3: "Lsun per pixel"
+/// 4: Optical depth
 #[derive(Debug, Deserialize)]
 #[serde(default)] // This ensures `Default::default()` is used for missing fields.
 pub struct Image {
-    pub nchan: i32,
-    pub trans: i32,
-    pub mol_i: i32,
+    pub nchan: i64,
+    pub trans: i64,
+    pub mol_i: i64,
     pub vel_res: f64,
     pub img_res: f64,
-    pub pixels: i32,
+    pub pxls: i64,
     pub unit: i32,
     pub units: String,
     pub freq: f64,
@@ -123,7 +131,7 @@ impl Default for Image {
             mol_i: -1,
             vel_res: -1.0,
             img_res: -1.0,
-            pixels: -1,
+            pxls: -1,
             unit: 0,
             freq: -1.0,
             bandwidth: -1.0,
@@ -150,7 +158,7 @@ pub struct Config {
 
 impl Config {
     /// Reads a TOML file and parses it into the Config struct
-    pub fn from_toml_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_toml_file(path: &str) -> Result<Self, Box<dyn Error>> {
         let content = fs::read_to_string(path)?;
         let config: Config = toml::from_str(&content)?;
         Ok(config)
