@@ -1,8 +1,9 @@
 // Default functions for `citrus` interface
 
-use crate::interface;
+use crate::{interface, MolData};
 
 pub const DENSITY_EXP: f64 = 0.2;
+pub const TREE_EXP: f64 = 2.0;
 
 pub fn grid_density(
     r: &mut Vec<f64>,
@@ -26,4 +27,12 @@ pub fn grid_density(
     let frac_density = total_density.powf(DENSITY_EXP) / grid_dens_global_max;
 
     return frac_density;
+}
+
+pub fn mol_data(n_species: i32) -> Option<Vec<MolData>> {
+    let mut mol_data: Vec<MolData> = Vec::new();
+    for _ in 0..n_species {
+        mol_data.push(MolData::default());
+    }
+    Some(mol_data)
 }
