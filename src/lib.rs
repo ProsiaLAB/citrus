@@ -118,6 +118,22 @@ pub struct Populations {
     pub partner: Vec<Rates>,
     pub cont: Vec<ContinuumLine>,
 }
+
+impl Default for Populations {
+    fn default() -> Self {
+        Populations {
+            pops: Vec::new(),
+            spec_num_dens: Vec::new(),
+            partner: Vec::new(),
+            cont: Vec::new(),
+            dopb: 0.0,
+            binv: 0.0,
+            nmol: 0.0,
+            abun: 0.0,
+        }
+    }
+}
+
 pub struct Grid {
     pub id: i64,
     pub x: [f64; dims::N_DIMS],
