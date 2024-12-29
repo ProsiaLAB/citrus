@@ -157,6 +157,33 @@ pub struct Grid {
     pub cont: Vec<ContinuumLine>,
 }
 
+impl Default for Grid {
+    fn default() -> Self {
+        Grid {
+            v1: Vec::new(),
+            v2: Vec::new(),
+            v3: Vec::new(),
+            dir: Vec::new(),
+            neigh: Vec::new(),
+            w: Vec::new(),
+            ds: Vec::new(),
+            dens: Vec::new(),
+            t: [-1.0; 2],
+            mag_field: [0.0; 3],
+            conv: 0,
+            cont: Vec::new(),
+            dopb_turb: 0.0,
+            sink: 0,
+            nphot: 0,
+            num_neigh: 0,
+            id: -1,
+            mol: None,
+            x: [0.0; dims::N_DIMS],
+            vel: [0.0; dims::N_DIMS],
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Spec {
     pub intense: Vec<f64>,
