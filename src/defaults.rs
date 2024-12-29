@@ -8,7 +8,7 @@ pub const TREE_EXP: f64 = 2.0;
 pub fn grid_density(
     r: &mut Vec<f64>,
     radius_squ: f64,
-    num_densities: i32,
+    num_densities: usize,
     grid_dens_global_max: f64,
 ) -> f64 {
     let mut val: Vec<f64> = vec![0.0; 99];
@@ -29,7 +29,7 @@ pub fn grid_density(
     return frac_density;
 }
 
-pub fn mol_data(n_species: i32) -> Option<Vec<MolData>> {
+pub fn mol_data(n_species: usize) -> Option<Vec<MolData>> {
     let mut mol_data: Vec<MolData> = Vec::new();
     for _ in 0..n_species {
         mol_data.push(MolData::default());
