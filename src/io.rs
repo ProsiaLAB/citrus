@@ -1,11 +1,11 @@
-use crate::constants::LOCAL_CMB_TEMP_SI;
-use crate::{
-    MAX_NUM_HIGH, MAX_NUM_OF_COLLISIONAL_PARTNERS, MAX_NUM_OF_SPECIES, NUM_OF_GRID_STAGES,
-};
-use serde_derive::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
+
+use serde_derive::Deserialize;
+
+use crate::constants::LOCAL_CMB_TEMP_SI;
+use crate::defaults;
 
 #[derive(Debug, Deserialize)]
 #[serde(default)] // This ensures `Default::default()` is used for missing fields.
@@ -60,12 +60,12 @@ impl Default for InputParams {
             pre_grid: String::new(),
             restart: false,
             grid_in_file: String::new(),
-            collisional_partner_ids: vec![0; MAX_NUM_OF_COLLISIONAL_PARTNERS],
-            nmol_weights: vec![-1.0; MAX_NUM_OF_COLLISIONAL_PARTNERS],
-            dust_weights: vec![-1.0; MAX_NUM_OF_COLLISIONAL_PARTNERS],
-            collisional_partner_mol_weights: vec![-1.0; MAX_NUM_OF_COLLISIONAL_PARTNERS],
-            grid_density_max_values: vec![-1.0; MAX_NUM_HIGH],
-            grid_density_max_locations: vec![[0.0; 3]; MAX_NUM_HIGH],
+            collisional_partner_ids: vec![0; defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS],
+            nmol_weights: vec![-1.0; defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS],
+            dust_weights: vec![-1.0; defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS],
+            collisional_partner_mol_weights: vec![-1.0; defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS],
+            grid_density_max_values: vec![-1.0; defaults::MAX_NUM_HIGH],
+            grid_density_max_locations: vec![[0.0; 3]; defaults::MAX_NUM_HIGH],
             cmb_temp: LOCAL_CMB_TEMP_SI,
             lte_only: false,
             init_lte: false,
@@ -79,10 +79,13 @@ impl Default for InputParams {
             ray_trace_algorithm: 0,
             reset_rng: false,
             do_solve_rte: false,
-            grid_out_files: vec![String::new(); NUM_OF_GRID_STAGES],
-            mol_data_file: vec![String::new(); MAX_NUM_OF_SPECIES],
-            grid_data_file: vec![String::new(); MAX_NUM_OF_SPECIES],
-            collisional_partner_names: vec![String::new(); MAX_NUM_OF_COLLISIONAL_PARTNERS],
+            grid_out_files: vec![String::new(); defaults::NUM_OF_GRID_STAGES],
+            mol_data_file: vec![String::new(); defaults::MAX_NUM_OF_SPECIES],
+            grid_data_file: vec![String::new(); defaults::MAX_NUM_OF_SPECIES],
+            collisional_partner_names: vec![
+                String::new();
+                defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS
+            ],
         }
     }
 }

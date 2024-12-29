@@ -1,8 +1,74 @@
-use rgsl::rng::algorithms as GSLRngAlgorithms;
-use rgsl::Rng as GSLRng;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{config::ConfigInfo, Grid, Populations, FIX_RANDOM_SEEDS};
+use rgsl::rng::algorithms as GSLRngAlgorithms;
+use rgsl::Rng as GSLRng;
+
+use crate::config::ConfigInfo;
+use crate::defaults;
+use crate::lines::ContinuumLine;
+use crate::pops::Populations;
+
+pub struct Point {
+    pub x: [f64; defaults::N_DIMS],
+    pub xn: [f64; defaults::N_DIMS],
+}
+
+pub struct Grid {
+    pub id: i64,
+    pub x: [f64; defaults::N_DIMS],
+    pub vel: [f64; defaults::N_DIMS],
+    pub mag_field: [f64; 3], // Magnetic field can only be 3D
+    pub v1: Vec<f64>,
+    pub v2: Vec<f64>,
+    pub v3: Vec<f64>,
+    pub num_neigh: i64,
+    pub dir: Vec<Point>,
+    pub neigh: Vec<Vec<Grid>>,
+    pub w: Vec<f64>,
+    pub sink: i64,
+    pub nphot: i64,
+    pub conv: i64,
+    pub dens: Vec<f64>,
+    pub t: [f64; 2],
+    pub dopb_turb: f64,
+    pub ds: Vec<f64>,
+    pub mol: Option<Vec<Populations>>,
+    pub cont: Vec<ContinuumLine>,
+}
+
+impl Default for Grid {
+    fn default() -> Self {
+        Grid {
+            v1: Vec::new(),
+            v2: Vec::new(),
+            v3: Vec::new(),
+            dir: Vec::new(),
+            neigh: Vec::new(),
+            w: Vec::new(),
+            ds: Vec::new(),
+            dens: Vec::new(),
+            t: [-1.0; 2],
+            mag_field: [0.0; 3],
+            conv: 0,
+            cont: Vec::new(),
+            dopb_turb: 0.0,
+            sink: 0,
+            nphot: 0,
+            num_neigh: 0,
+            id: -1,
+            mol: None,
+            x: [0.0; defaults::N_DIMS],
+            vel: [0.0; defaults::N_DIMS],
+        }
+    }
+}
+
+pub struct Cell {
+    pub vertex: [Option<Box<Grid>>; defaults::N_DIMS + 1],
+    pub neigh: [Option<Box<Cell>>; defaults::N_DIMS * 2],
+    pub id: u64,
+    pub centre: [f64; defaults::N_DIMS],
+}
 
 pub struct LinkType {
     pub id: u32,
@@ -60,7 +126,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) {
     let ran_opt = GSLRng::new(GSLRngAlgorithms::ranlxs2());
     match ran_opt {
         Some(mut ran) => {
-            if FIX_RANDOM_SEEDS {
+            if defaults::FIX_RANDOM_SEEDS {
                 ran.set(6611304);
             } else {
                 ran.set(

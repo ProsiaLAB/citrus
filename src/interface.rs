@@ -1,6 +1,5 @@
 // Temporary module to define user-facing functions
 // which serve as the interface to the `citrus` engine.
-
 use crate::constants as cc;
 
 pub fn density(x: f64, y: f64, z: f64) -> f64 {

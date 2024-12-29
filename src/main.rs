@@ -1,11 +1,12 @@
-use citrus::load_config;
-use citrus::messages;
-use citrus::parse_config;
-use citrus::run;
 use std::env;
 use std::error::Error;
 use std::fs;
 use std::process;
+
+use citrus::config::load_config;
+use citrus::config::parse_config;
+use citrus::engine::run;
+use citrus::messages;
 
 fn main() -> Result<(), Box<dyn Error>> {
     messages::greetings();

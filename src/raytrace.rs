@@ -1,6 +1,9 @@
-use crate::{dims, ContinuumLine, Populations};
 use std::cell::RefCell;
 use std::rc::Rc;
+
+use crate::defaults;
+use crate::lines::ContinuumLine;
+use crate::pops::Populations;
 
 // Define error types for the raytrace module
 pub enum RayThroughCellsError {
@@ -28,9 +31,9 @@ impl<'a> Simplex<'a> {
     pub fn new(id: u64) -> Self {
         Simplex {
             id,
-            vertex: vec![0; dims::N_DIMS + 1],
-            centres: vec![0.0; dims::N_DIMS],
-            neigh: vec![None; dims::N_DIMS + 1],
+            vertex: vec![0; defaults::N_DIMS + 1],
+            centres: vec![0.0; defaults::N_DIMS],
+            neigh: vec![None; defaults::N_DIMS + 1],
         }
     }
 
@@ -69,7 +72,7 @@ impl IntersectType {
         IntersectType {
             fi,
             orientation,
-            bary: vec![0.0; dims::N_DIMS],
+            bary: vec![0.0; defaults::N_DIMS],
             dist,
             coll_par,
         }
@@ -77,7 +80,7 @@ impl IntersectType {
 
     /// Set barycentric coordinates.
     pub fn set_bary(&mut self, values: Vec<f64>) {
-        if values.len() == dims::N_DIMS {
+        if values.len() == defaults::N_DIMS {
             self.bary = values;
         } else {
             panic!("Dimension mismatch with bary coordinates!");
@@ -106,9 +109,9 @@ pub struct FacePlusBasisType {
 }
 
 impl FacePlusBasisType {
-    /// Constructor for `FacePlusBasisType`, initializes vectors dynamically based on `dims::N_DIMS`.
+    /// Constructor for `FacePlusBasisType`, initializes vectors dynamically based on `defaults::N_DIMS`.
     pub fn new() -> Self {
-        let n_dims = dims::N_DIMS;
+        let n_dims = defaults::N_DIMS;
         FacePlusBasisType {
             axes: vec![vec![0.0; n_dims]; n_dims - 1],
             r: vec![vec![0.0; n_dims - 1]; n_dims],
@@ -118,7 +121,7 @@ impl FacePlusBasisType {
 
     /// Set a specific axis value.
     pub fn set_axis(&mut self, axis_index: usize, component_index: usize, value: f64) {
-        if axis_index < dims::N_DIMS - 1 && component_index < dims::N_DIMS {
+        if axis_index < defaults::N_DIMS - 1 && component_index < defaults::N_DIMS {
             self.axes[axis_index][component_index] = value;
         } else {
             panic!("Index out of bounds for axes array!");
@@ -127,7 +130,7 @@ impl FacePlusBasisType {
 
     /// Set a specific vertex value in `r`.
     pub fn set_vertex(&mut self, vertex_index: usize, component_index: usize, value: f64) {
-        if vertex_index < dims::N_DIMS && component_index < dims::N_DIMS - 1 {
+        if vertex_index < defaults::N_DIMS && component_index < defaults::N_DIMS - 1 {
             self.r[vertex_index][component_index] = value;
         } else {
             panic!("Index out of bounds for vertices array!");
@@ -136,7 +139,7 @@ impl FacePlusBasisType {
 
     /// Set the origin.
     pub fn set_origin(&mut self, values: Vec<f64>) {
-        if values.len() == dims::N_DIMS {
+        if values.len() == defaults::N_DIMS {
             self.origin = values;
         } else {
             panic!("Dimension mismatch with origin!");
@@ -157,7 +160,7 @@ impl FaceListType {
     pub fn new(num_faces: usize) -> Self {
         FaceListType {
             faces: Vec::with_capacity(num_faces),
-            face_ptrs: vec![None; dims::N_DIMS + 1],
+            face_ptrs: vec![None; defaults::N_DIMS + 1],
         }
     }
 
@@ -170,7 +173,7 @@ impl FaceListType {
 
     /// Sets a reference to a face in the `face_ptrs` array.
     pub fn set_face_ptr(&mut self, index: usize, face: Option<Rc<RefCell<FaceType>>>) {
-        if index < dims::N_DIMS + 1 {
+        if index < defaults::N_DIMS + 1 {
             self.face_ptrs[index] = face;
         } else {
             panic!("Index out of bounds for face pointers!");
@@ -209,8 +212,8 @@ pub struct BaryVelocityBuffer {
 }
 
 pub struct GridInterp {
-    pub x: [f64; dims::N_DIMS],
-    pub magnetic_field: [f64; dims::N_DIMS],
+    pub x: [f64; defaults::N_DIMS],
+    pub magnetic_field: [f64; defaults::N_DIMS],
     pub x_component_ray: f64,
     pub mol: Vec<Populations>,
     pub cont: ContinuumLine,
