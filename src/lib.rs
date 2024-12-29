@@ -305,14 +305,14 @@ pub fn parse_config(
             .iter()
             .take(MAX_NUM_OF_SPECIES)
             .filter(|s| !s.is_empty())
-            .count() as i32;
+            .count();
 
         let num_grid_data_files = inpars
             .grid_data_file
             .iter()
             .take(MAX_NUM_OF_SPECIES)
             .filter(|s| !s.is_empty())
-            .count() as i32;
+            .count();
 
         if num_grid_data_files == 0 {
             par.grid_data_file.clear();
