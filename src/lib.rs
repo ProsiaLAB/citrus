@@ -241,6 +241,20 @@ pub fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
     Ok(input_config)
 }
 
+/// Parse the configuration file
+/// Arguments:
+///    - `input_config`: The configuration file
+/// Returns:
+///   - A tuple containing the configuration information, image information, and molecular data
+///    respectively
+///
+/// # Errors
+///
+/// This function will return an error if the number of grid data files is different from the number of species.
+///
+/// # Panics
+///
+/// This function will panic if the index is out of bounds for the neighbor array.
 pub fn parse_config(
     input_config: Config,
 ) -> Result<(ConfigInfo, HashMap<String, ImageInfo>, Option<Vec<MolData>>), Box<dyn Error>> {
