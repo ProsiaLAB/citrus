@@ -153,7 +153,7 @@ pub struct Grid {
     pub t: [f64; 2],
     pub dopb_turb: f64,
     pub ds: Vec<f64>,
-    pub mol: Vec<Populations>,
+    pub mol: Option<Vec<Populations>>,
     pub cont: Vec<ContinuumLine>,
 }
 
