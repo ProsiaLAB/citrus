@@ -1,4 +1,4 @@
-use crate::dims;
+use crate::{dims, ContinuumLine, Populations};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -185,4 +185,33 @@ impl FaceListType {
             None
         }
     }
+}
+
+pub struct RayData {
+    pub x: f64,
+    pub y: f64,
+    pub intensity: Vec<f64>,
+    pub tau: Vec<f64>,
+    pub ppi: u64,
+    pub is_inside_image: bool,
+}
+
+pub struct BaryVelocityBuffer {
+    pub num_vertices: usize,
+    pub num_edges: usize,
+    pub edge_vertex_indices: Vec<[usize; 2]>,
+    pub vertex_velocities: Vec<Vec<f64>>,
+    pub edge_velocities: Vec<Vec<f64>>,
+    pub entry_cell_bary: Vec<f64>,
+    pub mid_cell_bary: Vec<f64>,
+    pub exit_cell_bary: Vec<f64>,
+    pub shape_fns: Vec<Vec<f64>>,
+}
+
+pub struct GridInterp {
+    pub x: [f64; dims::N_DIMS],
+    pub magnetic_field: [f64; dims::N_DIMS],
+    pub x_component_ray: f64,
+    pub mol: Vec<Populations>,
+    pub cont: ContinuumLine,
 }
