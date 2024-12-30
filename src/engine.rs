@@ -41,7 +41,7 @@ pub fn run(
 
     if par.do_pregrid {
         let mut gp = grid::set_default_grid(par.ncell, par.n_species);
-        grid::pre_define(par, &mut gp);
+        grid::pre_define(par, &mut gp)?;
     }
 
     Ok(())
