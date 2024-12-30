@@ -1,4 +1,5 @@
 // Some auxiliary functions
+use std::io::{self, Write}; // Import the Write trait
 
 use crate::constants as cc;
 // use rgsl::InterpAccel as GSLInterpAccel;
@@ -63,4 +64,19 @@ pub fn interpolate_kappa() -> f64 {
 
 pub fn calc_dust_data() -> f64 {
     return 0.0;
+}
+
+pub fn progress_bar(progress: f64, width: usize) {
+    let completed = (progress * width as f64).round() as usize;
+    let remaining = width - completed;
+
+    let bar: String = format!(
+        "[{}{}] {:.2}%",
+        "█".repeat(completed),
+        "░".repeat(remaining),
+        progress * 100.0
+    );
+
+    print!("\r{}", bar);
+    io::stdout().flush().unwrap(); // Flush stdout to update the terminal
 }
