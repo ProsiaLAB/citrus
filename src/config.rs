@@ -449,7 +449,7 @@ pub fn parse_config(
                     }
 
                     None => {
-                        eprintln!("Could not initialize random number generator.");
+                        panic!("Could not initialize random number generator.");
                     }
                 }
             }
