@@ -22,6 +22,7 @@ pub const GRAVITATIONAL_CONST_CGS: f64 = GRAVITATIONAL_CONST_SI * 1000.0; // gra
 pub const AU_CGS: f64 = AU_SI * 100.0; // astronomical unit            [cm]		*/
 pub const SOLAR_MASS_CGS: f64 = SOLAR_MASS_SI * 1000.0; // Solar mass                   [g]		*/
 pub const SOLAR_RADIUS_CGS: f64 = SOLAR_RADIUS_SI * 100.0; // Solar radius                 [cm]		*/
+pub const TYPICAL_ISM_DENS: f64 = 1000.0; // typical ISM density          [cm^-3]	*/
 /// Conversion factors:
 pub const ARCSEC_TO_RAD: f64 = std::f64::consts::PI / 180.0 / 3600.0; // arcsec to radian             [rad]		*/
 pub const CITRUS_EPS: f64 = 1e-30; // Small number to avoid division by zero	*/
