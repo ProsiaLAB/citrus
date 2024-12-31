@@ -54,6 +54,7 @@ impl Default for MolData {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Rates {
     pub t_binlow: i64,
     pub interp_coeff: f64,

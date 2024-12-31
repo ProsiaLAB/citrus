@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use qhull::sys;
 use qhull::Qh;
 use rgsl::rng::algorithms as GSLRngAlgorithms;
 use rgsl::Rng as GSLRng;
@@ -14,11 +13,13 @@ use crate::lines::ContinuumLine;
 use crate::pops::Populations;
 use crate::{defaults, utils};
 
+#[derive(Clone)]
 pub struct Point {
     pub x: [f64; defaults::N_DIMS],
     pub xn: [f64; defaults::N_DIMS],
 }
 
+#[derive(Clone)]
 pub struct Grid {
     pub id: i32,
     pub x: [f64; defaults::N_DIMS],
@@ -29,7 +30,7 @@ pub struct Grid {
     pub v3: Vec<f64>,
     pub num_neigh: usize,
     pub dir: Vec<Point>,
-    pub neigh: Vec<Vec<Grid>>,
+    pub neigh: Vec<Option<Box<Grid>>>,
     pub w: Vec<f64>,
     pub sink: i64,
     pub nphot: i64,
@@ -69,10 +70,11 @@ impl Default for Grid {
     }
 }
 
+#[derive(Clone)]
 pub struct Cell {
     pub vertex: [Option<Box<Grid>>; defaults::N_DIMS + 1],
     pub neigh: [Option<Box<Cell>>; defaults::N_DIMS * 2],
-    pub id: u64,
+    pub id: u32,
     pub centre: [f64; defaults::N_DIMS],
 }
 
@@ -256,15 +258,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
     }
 
     // call Delaunay triangulation
-    delaunay(
-        defaults::N_DIMS,
-        gp,
-        par.ncell as i32,
-        false,
-        true,
-        &Vec::new(),
-        0,
-    )?;
+    delaunay(gp, par.ncell, false, true)?;
 
     Ok(())
 }
@@ -309,13 +303,10 @@ fn check_grid_densities(gp: &Vec<Grid>, par: &ConfigInfo) {
 ///                 .neigh
 ///                 .vertx
 fn delaunay(
-    _num_dims: usize,
     gp: &mut Vec<Grid>,
-    _num_points: i32,
-    _get_cells: bool,
+    num_points: usize,
+    get_cells: bool,
     check_sink: bool,
-    _dc: &Vec<Cell>,
-    _num_cells: u64,
 ) -> Result<(), Box<dyn Error>> {
     // pt_array  contains the grid point locations in the format required by qhull.
     let pt_array: Vec<Vec<f64>> = gp.iter().map(|point| point.x.to_vec()).collect();
@@ -352,11 +343,114 @@ fn delaunay(
         gp[index].sink = 1;
     }
 
+    for vertex in qh.vertices() {
+        let id = vertex.point_id(&qh);
+        match id {
+            Ok(id) => {
+                let neighbors = vertex.neighbors().ok_or("Failed to get neighbors")?;
+                gp[id as usize].num_neigh = neighbors.size(&qh);
+                if gp[id as usize].num_neigh <= 0 {
+                    panic!("Error: `qhull` failed silently. A smoother `grid_density` might help.");
+                }
+                gp[id as usize].neigh = vec![None; gp[id as usize].num_neigh];
+            }
+            Err(_) => {
+                panic!("Failed to get point ID");
+            }
+        }
+    }
+
+    let mut point_ids_this_facet: [i32; defaults::N_DIMS + 1] = [0; defaults::N_DIMS + 1];
+    let mut num_cells: u64 = 0;
     for face in qh.all_facets() {
-        let vertices = face.vertices().ok_or("Failed to get vertices")?;
-        for vertex in vertices.iter() {
-            let id = vertex.id() as usize;
-            gp[id].num_neigh = vertices.size(&qh);
+        if !face.upper_delaunay() {
+            let mut j: usize = 0;
+            let vertices = face.vertices().ok_or("Failed to get vertices")?;
+            for vertex in vertices.iter() {
+                let point_id_this = vertex.point_id(&qh);
+                match point_id_this {
+                    Ok(point_id_this) => {
+                        point_ids_this_facet[j] = point_id_this;
+                        j += 1;
+                    }
+                    Err(_) => {
+                        panic!("Failed to get point ID");
+                    }
+                }
+            }
+            for i in 0..defaults::N_DIMS + 1 {
+                let id_i = point_ids_this_facet[i];
+                for j in 0..defaults::N_DIMS + 1 {
+                    let id_j = point_ids_this_facet[j];
+                    if i != j {
+                        let mut k: usize = 0;
+                        while gp[id_i as usize].neigh[k].is_some() {
+                            match gp[id_i as usize].neigh[k] {
+                                Some(ref neigh_grid) => {
+                                    let grid_id_j = gp[id_j as usize].id;
+                                    if neigh_grid.id != grid_id_j {
+                                        k += 1;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                None => {
+                                    panic!("Error: `qhull` failed silently. A smoother `grid_density` might help.");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            num_cells += 1;
+        }
+    }
+
+    for ppi in 0..num_points {
+        let mut j = 0;
+        for k in 0..gp[ppi].num_neigh {
+            if gp[ppi].neigh[k].is_some() {
+                j += 1;
+            }
+        }
+        gp[ppi].num_neigh = j;
+    }
+
+    if get_cells {
+        let mut dc: Vec<Box<Cell>> = Vec::with_capacity(num_cells as usize);
+        let mut fi: usize = 0;
+        for face in qh.all_facets() {
+            if !face.upper_delaunay() {
+                dc[fi].id = face.id();
+                fi += 1;
+            }
+        }
+        let mut fi: usize = 0;
+        for face in qh.all_facets() {
+            if !face.upper_delaunay() {
+                let mut i: usize = 0;
+                let neighbors = face.neighbors().ok_or("Failed to get neighbors")?;
+                for neighbor in neighbors.iter() {
+                    if neighbor.upper_delaunay() {
+                        dc[fi].neigh[i] = None;
+                    } else {
+                        let mut ffi: usize = 0;
+                        let mut neighbor_not_found = true;
+                        while ffi < num_cells as usize && neighbor_not_found {
+                            if dc[ffi].id == neighbor.id() {
+                                dc[fi].neigh[i] = Some(dc[ffi].clone());
+                                neighbor_not_found = false;
+                            }
+                            ffi += 1;
+                        }
+                        if ffi >= num_cells as usize && neighbor_not_found {
+                            panic!("Error: Something went wrong with the Delaunay triangulation");
+                        }
+                    }
+                    i += 1;
+                }
+                fi += 1;
+            }
         }
     }
 

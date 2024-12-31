@@ -1,6 +1,7 @@
 use crate::collparts::Rates;
 use crate::lines::ContinuumLine;
 
+#[derive(Debug, Clone)]
 pub struct Populations {
     pub pops: Vec<f64>,
     pub spec_num_dens: Vec<f64>,

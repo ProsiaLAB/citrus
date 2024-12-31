@@ -1,3 +1,4 @@
+#[derive(Debug, Default, Clone)]
 pub struct ContinuumLine {
     pub dust: f64,
     pub knu: f64,
