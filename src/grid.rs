@@ -330,7 +330,16 @@ fn delaunay(
     // pt_array  contains the grid point locations in the format required by qhull.
     let pt_array: Vec<Vec<f64>> = gp.iter().map(|point| point.x.to_vec()).collect();
 
-    let qh = Qh::new_delaunay(pt_array)?;
+    let CollectedCoords {
+        coords,
+        count: _,
+        dim,
+    } = prepare_delaunay_points(pt_array);
+    let qh = QhBuilder::default()
+        .delaunay(true)
+        .scale_last(true)
+        .triangulate(true)
+        .build_managed(dim, coords)?;
 
     let mut indices: Vec<usize> = Vec::new();
 
