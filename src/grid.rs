@@ -1,10 +1,12 @@
 use std::error::Error;
 use std::fs::File;
+use std::io::{self, Write};
 use std::io::{BufRead, BufReader};
 use std::mem::swap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use qhull::Qh;
+use qhull::helpers::{prepare_delaunay_points, CollectedCoords};
+use qhull::{Qh, QhBuilder};
 use rgsl::rng::algorithms as GSLRngAlgorithms;
 use rgsl::Rng as GSLRng;
 
@@ -276,7 +278,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
     dist_calc(gp, par.ncell);
 
     if !par.grid_file.is_empty() {
-        write_vtk_unstructured_points(gp, par.ncell)?;
+        write_vtk_unstructured_points(gp, par)?;
     }
 
     Ok(())
@@ -344,9 +346,9 @@ fn delaunay(
     let mut indices: Vec<usize> = Vec::new();
 
     if check_sink {
-        for face in qh.all_facets() {
-            if !face.upper_delaunay() {
-                let neighbors = face.neighbors().ok_or("Failed to get neighbors")?;
+        for facet in qh.all_facets() {
+            if !facet.upper_delaunay() {
+                let neighbors = facet.neighbors().ok_or("Failed to get neighbors")?;
                 for neighbor in neighbors.iter() {
                     if neighbor.upper_delaunay() {
                         let vertices = neighbor.vertices().ok_or("Failed to get vertices")?;
@@ -390,10 +392,10 @@ fn delaunay(
 
     let mut point_ids_this_facet: [i32; defaults::N_DIMS + 1] = [0; defaults::N_DIMS + 1];
     let mut num_cells: u64 = 0;
-    for face in qh.all_facets() {
-        if !face.upper_delaunay() {
+    for facet in qh.all_facets() {
+        if !facet.upper_delaunay() {
             let mut j: usize = 0;
-            let vertices = face.vertices().ok_or("Failed to get vertices")?;
+            let vertices = facet.vertices().ok_or("Failed to get vertices")?;
             for vertex in vertices.iter() {
                 let point_id_this = vertex.point_id(&qh);
                 match point_id_this {
@@ -447,17 +449,17 @@ fn delaunay(
     if get_cells {
         let mut dc: Vec<Box<Cell>> = Vec::with_capacity(num_cells as usize);
         let mut fi: usize = 0;
-        for face in qh.all_facets() {
-            if !face.upper_delaunay() {
-                dc[fi].id = face.id();
+        for facet in qh.all_facets() {
+            if !facet.upper_delaunay() {
+                dc[fi].id = facet.id();
                 fi += 1;
             }
         }
         let mut fi: usize = 0;
-        for face in qh.all_facets() {
-            if !face.upper_delaunay() {
+        for facet in qh.all_facets() {
+            if !facet.upper_delaunay() {
                 let mut i: usize = 0;
-                let neighbors = face.neighbors().ok_or("Failed to get neighbors")?;
+                let neighbors = facet.neighbors().ok_or("Failed to get neighbors")?;
                 for neighbor in neighbors.iter() {
                     if neighbor.upper_delaunay() {
                         dc[fi].neigh[i] = None;
@@ -586,9 +588,112 @@ fn dist_calc(gp: &mut Vec<Grid>, num_points: usize) {
 
 /// Write the grid points to a VTK file
 /// The VTK file is written in the unstructured points format.
-fn write_vtk_unstructured_points(
-    _gp: &Vec<Grid>,
-    _num_points: usize,
-) -> Result<(), Box<dyn Error>> {
+fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<(), Box<dyn Error>> {
+    let pt_array: Vec<Vec<f64>> = gp.iter().map(|point| point.x.to_vec()).collect();
+
+    let mut file = File::create(&par.grid_file)?;
+
+    // Write the VTK header
+    writeln!(file, "# vtk DataFile Version 3.0")?;
+    writeln!(file, "citrus grid points")?;
+    writeln!(file, "ASCII")?;
+    writeln!(file, "DATASET UNSTRUCTURED_GRID")?;
+    writeln!(file, "POINTS {} double", par.ncell)?;
+
+    for i in 0..par.ncell {
+        writeln!(
+            file,
+            "{:.6e} {:.6e} {:.6e}",
+            gp[i].x[0], gp[i].x[1], gp[i].x[2]
+        )?;
+    }
+    let CollectedCoords {
+        coords,
+        count: _,
+        dim,
+    } = prepare_delaunay_points(pt_array);
+    let qh = QhBuilder::default()
+        .delaunay(true)
+        .scale_last(true)
+        .is_tracing(0)
+        .build_managed(dim, coords)?;
+
+    let mut l: usize = 0;
+
+    for facet in qh.all_facets() {
+        if !facet.upper_delaunay() {
+            l += 1;
+        }
+    }
+
+    writeln!(file, "CELLS {} {}", l, 5 * l)?;
+    for facet in qh.all_facets() {
+        if !facet.upper_delaunay() {
+            writeln!(file, "4 ")?;
+            let vertices = facet.vertices().ok_or("Failed to get vertices")?;
+            for vertex in vertices.iter() {
+                let point_id = vertex.point_id(&qh);
+                match point_id {
+                    Ok(point_id) => {
+                        writeln!(file, "{} ", point_id)?;
+                    }
+                    Err(_) => {
+                        panic!("Failed to get point ID");
+                    }
+                }
+            }
+        }
+    }
+
+    writeln!(file, "CELL_TYPES {}", l)?;
+    for _ in 0..l {
+        writeln!(file, "10")?;
+    }
+    writeln!(file, "POINT_DATA {}", par.ncell)?;
+    writeln!(file, "SCALARS H2_density float 1")?;
+    writeln!(file, "LOOKUP_TABLE default")?;
+    for i in 0..par.ncell {
+        writeln!(file, "{:.6e}", gp[i].dens[0])?;
+    }
+    writeln!(file, "SCALARS Mol_density float 1")?;
+    writeln!(file, "LOOKUP_TABLE default")?;
+    if par.n_species > 0 {
+        for i in 0..par.ncell {
+            let mol_pop = gp[i].mol.as_ref().ok_or("Failed to get molecular data")?;
+            writeln!(file, "{:.6e}", mol_pop[0].abun * gp[i].dens[0])?;
+        }
+    } else {
+        for _ in 0..par.ncell {
+            writeln!(file, "{:.6e}", 0.0)?;
+        }
+    }
+    writeln!(file, "SCALARS Gas_temperature float 1")?;
+    writeln!(file, "LOOKUP_TABLE default")?;
+    for i in 0..par.ncell {
+        writeln!(file, "{:.6e}", gp[i].t[0])?;
+    }
+    writeln!(file, "SCALARS velocity float 1")?;
+    for i in 0..par.ncell {
+        let length = (gp[i].vel[0] * gp[i].vel[0]
+            + gp[i].vel[1] * gp[i].vel[1]
+            + gp[i].vel[2] * gp[i].vel[2])
+            .sqrt();
+        if length > 0.0 {
+            writeln!(
+                file,
+                "{:.6e} {:.6e} {:.6e}",
+                gp[i].vel[0] / length,
+                gp[i].vel[1] / length,
+                gp[i].vel[2] / length
+            )?;
+        } else {
+            writeln!(
+                file,
+                "{:.6e} {:.6e} {:.6e}",
+                gp[i].vel[0], gp[i].vel[1], gp[i].vel[2]
+            )?;
+        }
+    }
+
     Ok(())
 }
