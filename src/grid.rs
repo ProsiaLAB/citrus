@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::mem::swap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use qhull::Qh;
@@ -13,7 +14,7 @@ use crate::lines::ContinuumLine;
 use crate::pops::Populations;
 use crate::{defaults, utils};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Point {
     pub x: [f64; defaults::N_DIMS],
     pub xn: [f64; defaults::N_DIMS],
@@ -32,7 +33,7 @@ pub struct Grid {
     pub dir: Vec<Point>,
     pub neigh: Vec<Option<Box<Grid>>>,
     pub w: Vec<f64>,
-    pub sink: i64,
+    pub sink: bool,
     pub nphot: i64,
     pub conv: i64,
     pub dens: Vec<f64>,
@@ -59,7 +60,7 @@ impl Default for Grid {
             conv: 0,
             cont: Vec::new(),
             dopb_turb: 0.0,
-            sink: 0,
+            sink: false,
             nphot: 0,
             num_neigh: 0,
             id: -1,
@@ -196,7 +197,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
                     panic!("Error: No molecular data found");
                 }
 
-                gp[i].sink = 0;
+                gp[i].sink = false;
                 gp[i].dir = Vec::new();
                 gp[i].ds = Vec::new();
                 gp[i].neigh = Vec::new();
@@ -223,7 +224,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
                     gp[i].x[0] = x * scale;
                     gp[i].x[1] = y * scale;
                     gp[i].x[2] = z * scale;
-                    gp[i].sink = 1;
+                    gp[i].sink = true;
 
                     // Update the molecule data if it's available
                     if let Some(molecule) = &mut gp[i].mol {
@@ -259,6 +260,24 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
 
     // call Delaunay triangulation
     delaunay(gp, par.ncell, false, true)?;
+
+    /* We just asked delaunay() to flag any grid points with IDs lower than
+     * par->pIntensity (which means their distances from model centre are less
+     * than the model radius) but which are nevertheless found to be sink points
+     * by virtue of the geometry of the mesh of Delaunay cells. Now we need to
+     * reshuffle the list of grid points, then reset par->pIntensity, such that
+     * all the non-sink points still have IDs lower than par->pIntensity.
+     */
+
+    let n_extra_sinks = reorder_grid(gp, par.ncell)?;
+    par.p_intensity -= n_extra_sinks as usize;
+    par.p_intensity += n_extra_sinks as usize;
+
+    dist_calc(gp, par.ncell);
+
+    if !par.grid_file.is_empty() {
+        write_vtk_unstructured_points(gp, par.ncell)?;
+    }
 
     Ok(())
 }
@@ -340,7 +359,7 @@ fn delaunay(
     }
 
     for &index in indices.iter() {
-        gp[index].sink = 1;
+        gp[index].sink = true;
     }
 
     for vertex in qh.vertices() {
@@ -454,5 +473,113 @@ fn delaunay(
         }
     }
 
+    Ok(())
+}
+
+/// The algorithm works its way up the list of points with one index and down with
+/// another. The 'up' travel stops at the 1st sink point it finds, the 'down' at the
+/// 1st non-sink point. If at that point the 'up' index is lower in value than the
+/// 'down', the points are swapped. This is just a tiny bit tricky because we also
+/// need to make sure all the neigh pointers are swapped. That's why we make an
+/// ordered list of indices and perform the swaps on that as well.
+fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32, Box<dyn Error>> {
+    let mut n_extra_sinks = 0;
+    let mut indices: Vec<usize> = vec![0; num_points];
+
+    for up_i in 0..num_points {
+        indices[up_i] = up_i;
+    }
+
+    let mut up_i = 0;
+    let mut down_i = num_points - 1;
+    loop {
+        while up_i < num_points && !gp[up_i].sink {
+            up_i += 1;
+        }
+        while down_i > 0 && gp[down_i].sink {
+            down_i -= 1;
+        }
+        if up_i >= down_i {
+            break;
+        }
+        n_extra_sinks += 1;
+
+        let i = indices[down_i];
+        indices[down_i] = indices[up_i];
+        indices[up_i] = i;
+
+        // do the swap
+        let (before, after) = gp.as_mut_slice().split_at_mut(down_i + 1);
+        swap(&mut before[down_i], &mut after[up_i - down_i]);
+
+        // retain the id values as sequential
+        gp[down_i].id = down_i as i32;
+        gp[up_i].id = up_i as i32;
+    }
+
+    /*
+    Now we sort out the .neigh values. An example of how this should work is as
+    follows. Suppose we swapped points 30 and 41. We have fixed up the .id values,
+    but the swap is still shown in the 'indices' array. Thus we will have
+
+            gp[30].id == 30 (but all the other data is from 41)
+            gp[41].id == 41 (but all the other data is from 30)
+            indices[30] == 41
+            indices[41] == 30
+
+    Suppose further that the old value of gp[i].neigh[j] is &gp[30]. We detect that
+    we need to fix it (change it to &gp[41]) because ngi=&gp[30].id=30 !=
+    indices[ngi=30]=41. gp[i].neigh[j] is then reset to &gp[indices[30]] = &gp[41],
+    i.e. to point to the same data as used to be in location 30.
+      */
+
+    for i in 0..num_points {
+        for j in 0..gp[i].num_neigh {
+            if let Some(ref mut neigh_grid) = gp[i].neigh[j] {
+                let ng_i = neigh_grid.id;
+                if ng_i != indices[ng_i as usize] as i32 {
+                    let index = indices[ng_i as usize] as usize;
+                    let new_neigh = gp[index].clone();
+                    gp[i].neigh[j] = Some(Box::new(new_neigh));
+                }
+            }
+        }
+    }
+
+    Ok(n_extra_sinks)
+}
+
+/// Calculate the distance between grid points
+/// The distance between two points is calculated as the Euclidean distance
+/// between the two points.
+fn dist_calc(gp: &mut Vec<Grid>, num_points: usize) {
+    for i in 0..num_points {
+        gp[i].dir = vec![Point::default(); gp[i].num_neigh];
+        gp[i].ds = vec![0.0; gp[i].num_neigh];
+        for k in 0..gp[i].num_neigh {
+            for l in 0..3 {
+                if let Some(ref neigh) = gp[i].neigh[k] {
+                    gp[i].dir[k].x[l] = neigh.x[l] - gp[i].x[l];
+                }
+            }
+            gp[i].ds[k] = (gp[i].dir[k].x[0] * gp[i].dir[k].x[0]
+                + gp[i].dir[k].x[1] * gp[i].dir[k].x[1]
+                + gp[i].dir[k].x[2] * gp[i].dir[k].x[2])
+                .sqrt();
+
+            for l in 0..3 {
+                gp[i].dir[k].xn[l] = gp[i].dir[k].x[l] / gp[i].ds[k];
+            }
+        }
+        gp[i].nphot = defaults::RAYS_PER_POINT;
+    }
+}
+
+/// Write the grid points to a VTK file
+/// The VTK file is written in the unstructured points format.
+fn write_vtk_unstructured_points(
+    _gp: &Vec<Grid>,
+    _num_points: usize,
+) -> Result<(), Box<dyn Error>> {
     Ok(())
 }

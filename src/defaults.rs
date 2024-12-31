@@ -18,6 +18,8 @@ pub const NUM_RANDOM_DENS: usize = 100;
 pub const DENSITY_EXP: f64 = 0.2;
 pub const TREE_EXP: f64 = 2.0;
 
+pub const RAYS_PER_POINT: i64 = 200;
+
 pub fn grid_density(
     r: &mut Vec<f64>,
     radius_squ: f64,
