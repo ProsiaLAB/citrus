@@ -1,12 +1,11 @@
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, Write};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::mem::swap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use qhull::helpers::{prepare_delaunay_points, CollectedCoords};
-use qhull::{Qh, QhBuilder};
+use qhull::QhBuilder;
 use rgsl::rng::algorithms as GSLRngAlgorithms;
 use rgsl::Rng as GSLRng;
 
@@ -105,12 +104,13 @@ pub struct GridInfoType {
     pub mols: Vec<MolInfoType>,
 }
 
+#[derive(Default, Debug, Clone)]
 pub struct KeywordType {
     pub datatype: i64,
     pub keyname: String,
     pub comment: String,
     pub char_value: String,
-    pub int_value: i64,
+    pub int_value: i32,
     pub float_value: f64,
     pub double_value: f64,
     pub bool_value: bool,
@@ -282,6 +282,42 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
     }
 
     Ok(())
+}
+
+pub fn read_or_build_grid(par: &mut ConfigInfo) -> Result<Vec<Grid>, Box<dyn Error>> {
+    par.data_flags = 0;
+    if !par.grid_in_file.is_empty() {
+        read_grid_init(par);
+    }
+
+    Ok(Vec::new())
+}
+
+fn read_grid_init(par: &mut ConfigInfo) {
+    let num_desired_kwds = 3;
+    let mut desired_kwds = vec![KeywordType::default(); num_desired_kwds];
+
+    desired_kwds[0].datatype = 3; // LIME DOUBLE
+    desired_kwds[0].keyname = "RADIUS  ".to_string();
+
+    desired_kwds[1].datatype = 3; // LIME DOUBLE
+    desired_kwds[1].keyname = "MINSCALE".to_string();
+
+    desired_kwds[2].datatype = 1; // LIME INT
+    desired_kwds[2].keyname = "NSOLITER".to_string();
+
+    read_grid(); // TODO: Implement this function
+
+    par.radius = desired_kwds[0].double_value;
+    par.min_scale = desired_kwds[1].double_value;
+    par.n_solve_iters_done = desired_kwds[2].int_value;
+
+    par.radius_squ = par.radius * par.radius;
+    par.min_scale_squ = par.min_scale * par.min_scale;
+}
+
+fn read_grid() {
+    unimplemented!()
 }
 
 fn check_grid_densities(gp: &Vec<Grid>, par: &ConfigInfo) {

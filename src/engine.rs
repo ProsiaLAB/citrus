@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use crate::collparts::MolData;
+use crate::collparts::{check_user_density_weights, MolData};
 use crate::config::{ConfigInfo, ImageInfo};
-use crate::grid;
+use crate::grid::{self, Grid};
+use crate::pops::popsin;
 
 pub fn run(
     par: &mut ConfigInfo,
@@ -41,7 +42,13 @@ pub fn run(
 
     if par.do_pregrid {
         let mut gp = grid::set_default_grid(par.ncell, par.n_species);
-        grid::pre_define(par, &mut gp)?;
+        grid::pre_define(par, &mut gp)?; // sets `par.num_densities`
+        check_user_density_weights(par);
+    } else if par.restart {
+        popsin(); // TODO: Implement this function
+    } else {
+        check_user_density_weights(par);
+        let gp = grid::read_or_build_grid(par)?;
     }
 
     Ok(())
