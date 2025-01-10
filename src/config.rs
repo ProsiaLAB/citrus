@@ -449,7 +449,7 @@ pub fn parse_config(
                     }
 
                     None => {
-                        panic!("Could not initialize random number generator.");
+                        return Err("Could not initialize random number generator.".into());
                     }
                 }
             }

@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::mem::swap;
+use std::num::ParseFloatError;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use qhull::helpers::{prepare_delaunay_points, CollectedCoords};
@@ -163,18 +164,20 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
                 let values: Vec<f64> = line
                     .split_whitespace()
                     .map(|v| {
-                        v.parse::<f64>()
-                            .unwrap_or_else(|_| panic!("Failed to parse {}", v))
+                        v.parse::<f64>().map_err(|e| {
+                            eprintln!("Failed to parse {}: {}", v, e);
+                            e
+                        })
                     })
-                    .collect();
+                    .collect::<Result<Vec<f64>, ParseFloatError>>()?;
 
                 if values.len() != 9 {
-                    panic!("Error: Expected 9 values, got {}", values.len());
+                    return Err("Error: Expected 9 values".into());
                 }
 
                 let id = values[0] as i32;
                 if id >= par.p_intensity as i32 {
-                    panic!("Error: Invalid grid point ID: {}", id);
+                    return Err(format!("Error: Invalid grid point ID: {}", id).into());
                 }
 
                 gp[i].id = id;
@@ -196,7 +199,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
                 if let Some(ref mut molecule) = gp[i].mol {
                     molecule[0].abun = 1e-9;
                 } else {
-                    panic!("Error: No molecular data found");
+                    return Err("Error: No molecular data found".into());
                 }
 
                 gp[i].sink = false;
@@ -233,7 +236,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
                         molecule[0].abun = 0.0;
                         molecule[0].nmol = 0.0;
                     } else {
-                        panic!("Error: No molecular data found");
+                        return Err("Error: No molecular data found".into());
                     }
 
                     gp[i].dens[0] = cc::CITRUS_EPS; // Assuming CITRUS_EPS is defined
@@ -256,7 +259,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
             }
         }
         None => {
-            panic!("Failed to create random number generator");
+            return Err("Failed to create random number generator".into());
         }
     }
 
@@ -395,7 +398,7 @@ fn delaunay(
                                     indices.push(ppi as usize);
                                 }
                                 Err(_) => {
-                                    panic!("Failed to get point ID");
+                                    return Err("Failed to get point ID".into());
                                 }
                             }
                         }
@@ -416,12 +419,15 @@ fn delaunay(
                 let neighbors = vertex.neighbors().ok_or("Failed to get neighbors")?;
                 gp[id as usize].num_neigh = neighbors.size(&qh);
                 if gp[id as usize].num_neigh <= 0 {
-                    panic!("Error: `qhull` failed silently. A smoother `grid_density` might help.");
+                    return Err(
+                        "Error: `qhull` failed silently. A smoother `grid_density` might help."
+                            .into(),
+                    );
                 }
                 gp[id as usize].neigh = vec![None; gp[id as usize].num_neigh];
             }
             Err(_) => {
-                panic!("Failed to get point ID");
+                return Err("Failed to get point ID".into());
             }
         }
     }
@@ -440,7 +446,7 @@ fn delaunay(
                         j += 1;
                     }
                     Err(_) => {
-                        panic!("Failed to get point ID");
+                        return Err("Failed to get point ID".into());
                     }
                 }
             }
@@ -461,7 +467,7 @@ fn delaunay(
                                     }
                                 }
                                 None => {
-                                    panic!("Error: `qhull` failed silently. A smoother `grid_density` might help.");
+                                    return Err("Error: `qhull` failed silently. A smoother `grid_density` might help.".into());
                                 }
                             }
                         }
@@ -510,7 +516,10 @@ fn delaunay(
                             ffi += 1;
                         }
                         if ffi >= num_cells as usize && neighbor_not_found {
-                            panic!("Error: Something went wrong with the Delaunay triangulation");
+                            return Err(
+                                "Error: Something went wrong with the Delaunay triangulation"
+                                    .into(),
+                            );
                         }
                     }
                     i += 1;
@@ -674,7 +683,7 @@ fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<(),
                         writeln!(file, "{} ", point_id)?;
                     }
                     Err(_) => {
-                        panic!("Failed to get point ID");
+                        return Err("Failed to get point ID".into());
                     }
                 }
             }

@@ -42,7 +42,7 @@ impl<'a> Simplex<'a> {
         if index < self.neigh.len() {
             self.neigh[index] = neighbor;
         } else {
-            panic!("Index out of bounds for neighbor array!");
+            todo!()
         }
     }
 }
@@ -83,7 +83,7 @@ impl IntersectType {
         if values.len() == defaults::N_DIMS {
             self.bary = values;
         } else {
-            panic!("Dimension mismatch with bary coordinates!");
+            todo!()
         }
     }
 }
@@ -124,7 +124,7 @@ impl FacePlusBasisType {
         if axis_index < defaults::N_DIMS - 1 && component_index < defaults::N_DIMS {
             self.axes[axis_index][component_index] = value;
         } else {
-            panic!("Index out of bounds for axes array!");
+            todo!()
         }
     }
 
@@ -133,7 +133,7 @@ impl FacePlusBasisType {
         if vertex_index < defaults::N_DIMS && component_index < defaults::N_DIMS - 1 {
             self.r[vertex_index][component_index] = value;
         } else {
-            panic!("Index out of bounds for vertices array!");
+            todo!()
         }
     }
 
@@ -142,7 +142,7 @@ impl FacePlusBasisType {
         if values.len() == defaults::N_DIMS {
             self.origin = values;
         } else {
-            panic!("Dimension mismatch with origin!");
+            todo!()
         }
     }
 }
@@ -176,7 +176,7 @@ impl FaceListType {
         if index < defaults::N_DIMS + 1 {
             self.face_ptrs[index] = face;
         } else {
-            panic!("Index out of bounds for face pointers!");
+            todo!()
         }
     }
 

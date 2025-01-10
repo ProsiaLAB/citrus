@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Ensure that the user has provided a path to a TOML file
     if args.len() != 1 {
-        panic!("Usage: citrus <path-to-input-file>");
+        return Err("Usage: citrus <path-to-input-file>".into());
     }
 
     let path = &args[0];
@@ -25,19 +25,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = match fs::canonicalize(path) {
         Ok(p) => p, // Successfully resolved to an absolute path
         Err(e) => {
-            panic!("Error resolving the path '{}': {}", path, e);
+            return Err(e.into());
         }
     };
 
     // Ensure the path exists after resolving it
     if !path.exists() {
-        panic!("The path '{}' does not exist.", path.display());
+        return Err("The path does not exist.".into());
     }
 
     // Load the TOML file
-    let input_config = load_config(path.to_str().unwrap_or_else(|| {
-        panic!("Error: The canonicalized path is not valid UTF-8.");
-    }))?;
+    let input_config = load_config(
+        path.to_str()
+            .ok_or_else(|| format!("Error: The canonicalized path is not valid UTF-8."))?,
+    )?;
 
     // Parse the loaded `Config` struct
     let (mut par, mut img, mut mol_data) = parse_config(input_config)?;
