@@ -51,11 +51,11 @@ impl<'a> Simplex<'a> {
 /// intersection between a ray (defined by a direction unit vector 'dir' and a
 /// starting position 'r') and a face of a simplex.
 #[derive(Debug)]
-pub struct IntersectType {
+pub struct Intersect {
     /// The index (in the range {0...N}) of the face (and thus of the opposite
     /// vertex, i.e. the one 'missing' from the bary[] list of this face).
     pub fi: i32,
-    /// >0 means the ray exits, < 0 means it enters, == 0 means the
+    /// `> 0` means the ray exits, `< 0` means it enters, `== 0` means the
     /// face is parallel to the ray.
     pub orientation: i32,
     pub bary: Vec<f64>,
@@ -66,10 +66,10 @@ pub struct IntersectType {
     pub coll_par: f64,
 }
 
-impl IntersectType {
-    /// Constructor for IntersectType
+impl Intersect {
+    /// Constructor for `Intersect`
     pub fn new(fi: i32, orientation: i32, dist: f64, coll_par: f64) -> Self {
-        IntersectType {
+        Intersect {
             fi,
             orientation,
             bary: vec![0.0; defaults::N_DIMS],
@@ -89,7 +89,7 @@ impl IntersectType {
 }
 
 #[derive(Debug)]
-pub struct FaceType {
+pub struct Face {
     /// `r` is a list of the the `N` vertices of the face, each of which has `N`
     /// cartesian components.
     pub r: Vec<Vec<f64>>,
@@ -99,7 +99,7 @@ pub struct FaceType {
 }
 
 #[derive(Debug)]
-pub struct FacePlusBasisType {
+pub struct FaceBasis {
     pub axes: Vec<Vec<f64>>,
     ///  `r` expresses the location of the N vertices of a simplicial polytope face
     /// in N-space, in terms of components along the N-1 orthogonal axes in the
@@ -108,11 +108,11 @@ pub struct FacePlusBasisType {
     pub origin: Vec<f64>,
 }
 
-impl FacePlusBasisType {
-    /// Constructor for `FacePlusBasisType`, initializes vectors dynamically based on `defaults::N_DIMS`.
+impl FaceBasis {
+    /// Constructor for `FaceBasis`, initializes vectors dynamically based on `defaults::N_DIMS`.
     pub fn new() -> Self {
         let n_dims = defaults::N_DIMS;
-        FacePlusBasisType {
+        FaceBasis {
             axes: vec![vec![0.0; n_dims]; n_dims - 1],
             r: vec![vec![0.0; n_dims - 1]; n_dims],
             origin: vec![0.0; n_dims],
@@ -148,31 +148,31 @@ impl FacePlusBasisType {
 }
 
 #[derive(Debug)]
-pub struct FaceListType {
+pub struct FaceList {
     /// A collection of faces.
-    pub faces: Vec<Rc<RefCell<FaceType>>>,
+    pub faces: Vec<Rc<RefCell<Face>>>,
     /// A collection of optional references to the faces, up to `N_DIMS + 1`.
-    pub face_ptrs: Vec<Option<Rc<RefCell<FaceType>>>>,
+    pub face_ptrs: Vec<Option<Rc<RefCell<Face>>>>,
 }
 
-impl FaceListType {
-    /// Constructor for `FaceListType`, initializes the struct with empty vectors.
+impl FaceList {
+    /// Constructor for `FaceList`, initializes the struct with empty vectors.
     pub fn new(num_faces: usize) -> Self {
-        FaceListType {
+        FaceList {
             faces: Vec::with_capacity(num_faces),
             face_ptrs: vec![None; defaults::N_DIMS + 1],
         }
     }
 
     /// Adds a new face to the face list.
-    pub fn add_face(&mut self, face: FaceType) -> Rc<RefCell<FaceType>> {
+    pub fn add_face(&mut self, face: Face) -> Rc<RefCell<Face>> {
         let face_rc = Rc::new(RefCell::new(face));
         self.faces.push(face_rc.clone());
         face_rc
     }
 
     /// Sets a reference to a face in the `face_ptrs` array.
-    pub fn set_face_ptr(&mut self, index: usize, face: Option<Rc<RefCell<FaceType>>>) {
+    pub fn set_face_ptr(&mut self, index: usize, face: Option<Rc<RefCell<Face>>>) {
         if index < defaults::N_DIMS + 1 {
             self.face_ptrs[index] = face;
         } else {
@@ -181,7 +181,7 @@ impl FaceListType {
     }
 
     /// Gets a face reference at a given index in the `face_ptrs` array.
-    pub fn get_face_ptr(&self, index: usize) -> Option<Rc<RefCell<FaceType>>> {
+    pub fn get_face_ptr(&self, index: usize) -> Option<Rc<RefCell<Face>>> {
         if index < self.face_ptrs.len() {
             self.face_ptrs[index].clone()
         } else {

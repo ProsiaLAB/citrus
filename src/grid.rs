@@ -81,19 +81,19 @@ pub struct Cell {
     pub centre: [f64; defaults::N_DIMS],
 }
 
-pub struct LinkType {
+pub struct Link {
     pub id: u32,
     pub gis: [u32; 2],
     pub vels: Vec<f64>,
 }
 
-pub struct MolInfoType {
+pub struct MoleculeInfo {
     pub mol_name: String,
     pub n_levels: u64,
     pub n_lines: u64,
 }
 
-pub struct GridInfoType {
+pub struct GridInfo {
     pub n_internal_points: u32,
     pub n_sink_points: u32,
     pub n_links: u32,
@@ -102,11 +102,11 @@ pub struct GridInfoType {
     pub n_species: u16,
     pub n_densities: u16,
     pub n_link_vels: u16,
-    pub mols: Vec<MolInfoType>,
+    pub mols: Vec<MoleculeInfo>,
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct KeywordType {
+pub struct Keyword {
     pub datatype: i64,
     pub keyname: String,
     pub comment: String,
@@ -298,7 +298,7 @@ pub fn read_or_build_grid(par: &mut ConfigInfo) -> Result<Vec<Grid>, Box<dyn Err
 
 fn read_grid_init(par: &mut ConfigInfo) {
     let num_desired_kwds = 3;
-    let mut desired_kwds = vec![KeywordType::default(); num_desired_kwds];
+    let mut desired_kwds = vec![Keyword::default(); num_desired_kwds];
 
     desired_kwds[0].datatype = 3; // LIME DOUBLE
     desired_kwds[0].keyname = "RADIUS  ".to_string();
@@ -319,6 +319,14 @@ fn read_grid_init(par: &mut ConfigInfo) {
     par.min_scale_squ = par.min_scale * par.min_scale;
 }
 
+/// This is designed to be a generic function to read the grid data from file. It is
+/// assumed that the data will be stored in several tables of different size,
+/// corresponding to the different dimensionalities of the elements of the 'grid'
+/// struct. See 'writeGrid' for a description.
+///
+/// Some sanity checks are performed here and also in the deeper functions, but any
+/// check of the validity of the state of completeness of the grid data (as encoded
+/// in the returned argument dataFlags) is left to the calling routine.
 fn read_grid() {
     unimplemented!()
 }
