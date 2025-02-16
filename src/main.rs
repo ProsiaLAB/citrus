@@ -1,13 +1,16 @@
 use std::env;
-use std::error::Error;
 use std::fs;
+
+use anyhow::anyhow;
+use anyhow::bail;
+use anyhow::Result;
 
 use citrus::config::load_config;
 use citrus::config::parse_config;
 use citrus::engine;
 use citrus::messages;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     messages::greetings();
     // messages::description();
 
@@ -16,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Ensure that the user has provided a path to a TOML file
     if args.len() != 1 {
-        return Err("Usage: citrus <path-to-input-file>".into());
+        bail!("Usage: citrus <path-to-input-file>");
     }
 
     let path = &args[0];
@@ -31,13 +34,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Ensure the path exists after resolving it
     if !path.exists() {
-        return Err("The path does not exist.".into());
+        bail!("The path does not exist.");
     }
 
     // Load the TOML file
     let input_config = load_config(
         path.to_str()
-            .ok_or_else(|| format!("Error: The canonicalized path is not valid UTF-8."))?,
+            .ok_or_else(|| anyhow!("Error: The canonicalized path is not valid UTF-8."))?,
     )?;
 
     // Parse the loaded `Config` struct

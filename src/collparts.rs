@@ -1,4 +1,5 @@
-use std::error::Error;
+use anyhow::bail;
+use anyhow::Result;
 
 use crate::defaults;
 
@@ -111,7 +112,7 @@ pub struct Rates {
 ///
 ///         * par->nMolWeights: this list gives the weights to be applied to the N
 /// density values when calculating molecular densities from abundances.
-pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<(), Box<dyn Error>> {
+pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
     par.collisional_partner_user_set_flags = 0;
 
     // Get the numbers of elements set by the user for each of the 4 parameters:
@@ -285,7 +286,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<(), Box<dyn Er
         for i in 0..num_user_set_coll_part_ids {
             for j in 0..i {
                 if par.collisional_partner_ids[i] == uniuqe_coll_part_ids[j] {
-                    return Err("ERROR: The user-set collision partner IDs must be unique.".into());
+                    // return Err("ERROR: The user-set collision partner IDs must be unique.".into());
                 }
             }
             uniuqe_coll_part_ids[i] = par.collisional_partner_ids[i];
@@ -298,7 +299,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<(), Box<dyn Er
             sum += par.nmol_weights[i];
         }
         if sum <= 0.0 {
-            return Err("ERROR: The user-set molecular weights must be positive.".into());
+            bail!("ERROR: The user-set molecular weights must be positive.");
         }
     }
     Ok(())

@@ -1,9 +1,10 @@
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use anyhow::bail;
+use anyhow::Result;
 use rgsl::rng::algorithms as GSLRngAlgorithms;
 use rgsl::Rng as GSLRng;
 
@@ -109,7 +110,7 @@ pub struct ImageInfo {
 //     }
 // }
 
-pub fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
+pub fn load_config(path: &str) -> Result<Config> {
     let input_config = Config::from_toml_file(path)?;
     Ok(input_config)
 }
@@ -130,7 +131,7 @@ pub fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
 /// This function will panic if the index is out of bounds for the neighbor array.
 pub fn parse_config(
     input_config: Config,
-) -> Result<(ConfigInfo, HashMap<String, ImageInfo>, Option<Vec<MolData>>), Box<dyn Error>> {
+) -> Result<(ConfigInfo, HashMap<String, ImageInfo>, Option<Vec<MolData>>)> {
     // Extract the parameters and images from the parsed TOML file
     let inpars = input_config.parameters;
 
@@ -204,7 +205,7 @@ pub fn parse_config(
         if num_grid_data_files == 0 {
             par.grid_data_file.clear();
         } else if num_grid_data_files != par.n_species {
-            return Err("Number of grid data files different from number of species.".into());
+            bail!("Number of grid data files different from number of species.");
         } else {
             par.grid_data_file = inpars
                 .grid_data_file
@@ -300,16 +301,16 @@ pub fn parse_config(
 
     if par.grid_in_file.is_empty() {
         if par.radius <= 0.0 {
-            return Err("Radius must be positive.".into());
+            bail!("Radius must be positive.");
         }
         if par.min_scale <= 0.0 {
-            return Err("Minimum scale must be positive.".into());
+            bail!("Minimum scale must be positive.");
         }
         if par.p_intensity <= 0 {
-            return Err("Number of intensity points must be positive.".into());
+            bail!("Number of intensity points must be positive.");
         }
         if par.sink_points <= 0 {
-            return Err("Number of sink points must be positive.".into());
+            bail!("Number of sink points must be positive.");
         }
     }
 
@@ -339,7 +340,7 @@ pub fn parse_config(
             par.num_densities = num_func_densities;
 
             if par.num_densities <= 0 {
-                return Err("No density values returned".into());
+                bail!("No density values returned");
             }
         }
     }
@@ -442,14 +443,12 @@ pub fn parse_config(
                                 }
                             }
                         } else {
-                            return Err(
-                                "Could not find a non-pathological grid density value.".into()
-                            );
+                            bail!("Could not find a non-pathological grid density value.");
                         }
                     }
 
                     None => {
-                        return Err("Could not initialize random number generator.".into());
+                        bail!("Could not initialize random number generator.");
                     }
                 }
             }
@@ -537,7 +536,7 @@ pub fn parse_config(
                             img.img_units.push(unit);
                         }
                         Err(_) => {
-                            return Err("Could not parse image units.".into());
+                            bail!("Could not parse image units.");
                         }
                     }
                 }
@@ -554,7 +553,7 @@ pub fn parse_config(
                     img.nchan = 1;
                 }
                 if img.freq < 0.0 {
-                    return Err("You must set a frequency for continuum image.".into());
+                    bail!("You must set a frequency for continuum image.");
                 }
                 if img.trans > -1 || img.bandwidth > -1.0 {
                     let msg = format!(
@@ -589,9 +588,7 @@ pub fn parse_config(
                         eprintln!("{}", msg);
                     }
                 } else if img.nchan <= 0 || img.bandwidth <= 0.0 && img.vel_res <= 0.0 {
-                    return Err(
-                        "You must set either nchan, bandwidth, or velres for a line image.".into(),
-                    );
+                    bail!("You must set either nchan, bandwidth, or velres for a line image.");
                 }
                 // Check that we have keywords which allow us to calculate the image
                 // frequency (if necessary) after reading in the moldata file:
@@ -617,18 +614,18 @@ pub fn parse_config(
                     }
                 } else if img.freq < 0.0 {
                     // User has not set `trans`, nor `freq`
-                    return Err("You must either set `trans` or `freq` for a line image (and optionally the `mol_i`".into());
+                    bail!("You must either set `trans` or `freq` for a line image (and optionally the `mol_i`");
                 } // else user has set `freq`
                 img.do_line = true;
             } // End of check for line or continuum image
             if img.img_res < 0.0 {
-                return Err("You must set image resolution.".into());
+                bail!("You must set image resolution.");
             }
             if img.pxls <= 0 {
-                return Err("You must set number of pixels.".into());
+                bail!("You must set number of pixels.");
             }
             if img.distance <= 0.0 {
-                return Err("You must set distance to source.".into());
+                bail!("You must set distance to source.");
             }
             img.img_res = img.img_res * cc::ARCSEC_TO_RAD;
             img.pixel = vec![Spec::default(); (img.pxls * img.pxls) as usize];
@@ -749,7 +746,7 @@ pub fn parse_config(
 
     if par.n_cont_images > 0 {
         if par.dust.is_empty() {
-            return Err("You must set dust parameters for continuum images.".into());
+            bail!("You must set dust parameters for continuum images.");
         } else {
             // Open the dust file and check if it exists if it does if it is empty
             let path = Path::new(&par.dust);

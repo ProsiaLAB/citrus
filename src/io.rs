@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
 
+use anyhow::Result;
 use serde::Deserialize;
 
 use crate::constants::LOCAL_CMB_TEMP_SI;
@@ -161,7 +161,7 @@ pub struct Config {
 
 impl Config {
     /// Reads a TOML file and parses it into the Config struct
-    pub fn from_toml_file(path: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn from_toml_file(path: &str) -> Result<Self> {
         let content = fs::read_to_string(path)?;
         let config: Config = toml::from_str(&content)?;
         Ok(config)

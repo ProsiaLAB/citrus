@@ -1,10 +1,12 @@
-use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::mem::swap;
 use std::num::ParseFloatError;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use anyhow::anyhow;
+use anyhow::bail;
+use anyhow::Result;
 use qhull::helpers::{prepare_delaunay_points, CollectedCoords};
 use qhull::QhBuilder;
 use rgsl::rng::algorithms as GSLRngAlgorithms;
@@ -134,7 +136,7 @@ pub fn set_default_grid(num_points: usize, num_species: usize) -> Vec<Grid> {
     gp
 }
 
-pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dyn Error>> {
+pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
     let rand_gen_opt = GSLRng::new(GSLRngAlgorithms::ranlxs2());
 
     match rand_gen_opt {
@@ -172,12 +174,12 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
                     .collect::<Result<Vec<f64>, ParseFloatError>>()?;
 
                 if values.len() != 9 {
-                    return Err("Error: Expected 9 values".into());
+                    bail!("Error: Expected 9 values");
                 }
 
                 let id = values[0] as i32;
                 if id >= par.p_intensity as i32 {
-                    return Err(format!("Error: Invalid grid point ID: {}", id).into());
+                    bail!("Error: Invalid grid point ID: {}", id);
                 }
 
                 gp[i].id = id;
@@ -199,7 +201,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
                 if let Some(ref mut molecule) = gp[i].mol {
                     molecule[0].abun = 1e-9;
                 } else {
-                    return Err("Error: No molecular data found".into());
+                    bail!("Error: No molecular data found");
                 }
 
                 gp[i].sink = false;
@@ -236,7 +238,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
                         molecule[0].abun = 0.0;
                         molecule[0].nmol = 0.0;
                     } else {
-                        return Err("Error: No molecular data found".into());
+                        bail!("Error: No molecular data found");
                     }
 
                     gp[i].dens[0] = cc::CITRUS_EPS; // Assuming CITRUS_EPS is defined
@@ -259,7 +261,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
             }
         }
         None => {
-            return Err("Failed to create random number generator".into());
+            bail!("Failed to create random number generator");
         }
     }
 
@@ -287,7 +289,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<(), Box<dy
     Ok(())
 }
 
-pub fn read_or_build_grid(par: &mut ConfigInfo) -> Result<Vec<Grid>, Box<dyn Error>> {
+pub fn read_or_build_grid(par: &mut ConfigInfo) -> Result<Vec<Grid>> {
     par.data_flags = 0;
     if !par.grid_in_file.is_empty() {
         read_grid_init(par);
@@ -375,7 +377,7 @@ fn delaunay(
     num_points: usize,
     get_cells: bool,
     check_sink: bool,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<()> {
     // pt_array  contains the grid point locations in the format required by qhull.
     let pt_array: Vec<Vec<f64>> = gp.iter().map(|point| point.x.to_vec()).collect();
 
@@ -388,17 +390,22 @@ fn delaunay(
         .delaunay(true)
         .scale_last(true)
         .triangulate(true)
-        .build_managed(dim, coords)?;
+        .build_managed(dim, coords)
+        .map_err(|e| anyhow!("Failed to build Qhull: {:?}", e))?;
 
     let mut indices: Vec<usize> = Vec::new();
 
     if check_sink {
         for facet in qh.all_facets() {
             if !facet.upper_delaunay() {
-                let neighbors = facet.neighbors().ok_or("Failed to get neighbors")?;
+                let neighbors = facet
+                    .neighbors()
+                    .ok_or_else(|| anyhow!("Failed to get neighbors"))?;
                 for neighbor in neighbors.iter() {
                     if neighbor.upper_delaunay() {
-                        let vertices = neighbor.vertices().ok_or("Failed to get vertices")?;
+                        let vertices = neighbor
+                            .vertices()
+                            .ok_or_else(|| anyhow!("Failed to get vertices"))?;
                         for vertex in vertices.iter() {
                             let ppi = vertex.point_id(&qh);
                             match ppi {
@@ -406,7 +413,7 @@ fn delaunay(
                                     indices.push(ppi as usize);
                                 }
                                 Err(_) => {
-                                    return Err("Failed to get point ID".into());
+                                    bail!("Failed to get point ID");
                                 }
                             }
                         }
@@ -424,18 +431,17 @@ fn delaunay(
         let id = vertex.point_id(&qh);
         match id {
             Ok(id) => {
-                let neighbors = vertex.neighbors().ok_or("Failed to get neighbors")?;
+                let neighbors = vertex
+                    .neighbors()
+                    .ok_or_else(|| anyhow!("Failed to get neighbors"))?;
                 gp[id as usize].num_neigh = neighbors.size(&qh);
                 if gp[id as usize].num_neigh <= 0 {
-                    return Err(
-                        "Error: `qhull` failed silently. A smoother `grid_density` might help."
-                            .into(),
-                    );
+                    bail!("ERROR: `qhull` failed silently. A smoother `grid_density` might help.");
                 }
                 gp[id as usize].neigh = vec![None; gp[id as usize].num_neigh];
             }
             Err(_) => {
-                return Err("Failed to get point ID".into());
+                bail!("Failed to get point ID");
             }
         }
     }
@@ -445,7 +451,9 @@ fn delaunay(
     for facet in qh.all_facets() {
         if !facet.upper_delaunay() {
             let mut j: usize = 0;
-            let vertices = facet.vertices().ok_or("Failed to get vertices")?;
+            let vertices = facet
+                .vertices()
+                .ok_or_else(|| anyhow!("Failed to get vertices"))?;
             for vertex in vertices.iter() {
                 let point_id_this = vertex.point_id(&qh);
                 match point_id_this {
@@ -454,7 +462,7 @@ fn delaunay(
                         j += 1;
                     }
                     Err(_) => {
-                        return Err("Failed to get point ID".into());
+                        bail!("Failed to get point ID");
                     }
                 }
             }
@@ -475,7 +483,7 @@ fn delaunay(
                                     }
                                 }
                                 None => {
-                                    return Err("Error: `qhull` failed silently. A smoother `grid_density` might help.".into());
+                                    bail!("ERROR: `qhull` failed silently. A smoother `grid_density` might help.");
                                 }
                             }
                         }
@@ -509,7 +517,9 @@ fn delaunay(
         for facet in qh.all_facets() {
             if !facet.upper_delaunay() {
                 let mut i: usize = 0;
-                let neighbors = facet.neighbors().ok_or("Failed to get neighbors")?;
+                let neighbors = facet
+                    .neighbors()
+                    .ok_or_else(|| anyhow!("Failed to get neighbors"))?;
                 for neighbor in neighbors.iter() {
                     if neighbor.upper_delaunay() {
                         dc[fi].neigh[i] = None;
@@ -524,10 +534,7 @@ fn delaunay(
                             ffi += 1;
                         }
                         if ffi >= num_cells as usize && neighbor_not_found {
-                            return Err(
-                                "Error: Something went wrong with the Delaunay triangulation"
-                                    .into(),
-                            );
+                            bail!("ERROR: Something went wrong with the Delaunay triangulation");
                         }
                     }
                     i += 1;
@@ -546,7 +553,7 @@ fn delaunay(
 /// 'down', the points are swapped. This is just a tiny bit tricky because we also
 /// need to make sure all the neigh pointers are swapped. That's why we make an
 /// ordered list of indices and perform the swaps on that as well.
-fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32, Box<dyn Error>> {
+fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32> {
     let mut n_extra_sinks = 0;
     let mut indices: Vec<usize> = vec![0; num_points];
 
@@ -641,7 +648,7 @@ fn dist_calc(gp: &mut Vec<Grid>, num_points: usize) {
 
 /// Write the grid points to a VTK file
 /// The VTK file is written in the unstructured points format.
-fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<(), Box<dyn Error>> {
+fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<()> {
     let pt_array: Vec<Vec<f64>> = gp.iter().map(|point| point.x.to_vec()).collect();
 
     let mut file = File::create(&par.grid_file)?;
@@ -669,7 +676,8 @@ fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<(),
         .delaunay(true)
         .scale_last(true)
         .is_tracing(0)
-        .build_managed(dim, coords)?;
+        .build_managed(dim, coords)
+        .map_err(|e| anyhow!("Failed to build Qhull: {:?}", e))?;
 
     let mut l: usize = 0;
 
@@ -683,7 +691,9 @@ fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<(),
     for facet in qh.all_facets() {
         if !facet.upper_delaunay() {
             writeln!(file, "4 ")?;
-            let vertices = facet.vertices().ok_or("Failed to get vertices")?;
+            let vertices = facet
+                .vertices()
+                .ok_or_else(|| anyhow!("Failed to get vertices"))?;
             for vertex in vertices.iter() {
                 let point_id = vertex.point_id(&qh);
                 match point_id {
@@ -691,7 +701,7 @@ fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<(),
                         writeln!(file, "{} ", point_id)?;
                     }
                     Err(_) => {
-                        return Err("Failed to get point ID".into());
+                        bail!("Failed to get point ID");
                     }
                 }
             }
@@ -712,7 +722,10 @@ fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<(),
     writeln!(file, "LOOKUP_TABLE default")?;
     if par.n_species > 0 {
         for i in 0..par.ncell {
-            let mol_pop = gp[i].mol.as_ref().ok_or("Failed to get molecular data")?;
+            let mol_pop = gp[i]
+                .mol
+                .as_ref()
+                .ok_or_else(|| anyhow!("Failed to get molecular data"))?;
             writeln!(file, "{:.6e}", mol_pop[0].abun * gp[i].dens[0])?;
         }
     } else {

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
-use std::error::Error;
+
+use anyhow::bail;
+use anyhow::Result;
 
 use crate::collparts::{check_user_density_weights, MolData};
 use crate::config::{ConfigInfo, ImageInfo};
@@ -10,7 +12,7 @@ pub fn run(
     par: &mut ConfigInfo,
     _img: &mut HashMap<String, ImageInfo>,
     _mol_data: &mut Option<Vec<MolData>>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<()> {
     if par.restart {
         par.do_solve_rte = false;
         par.do_mol_calcs = par.n_line_images > 0;
@@ -20,7 +22,7 @@ pub fn run(
         }
         par.do_mol_calcs = par.do_solve_rte || par.n_line_images > 0;
         if par.do_mol_calcs && par.mol_data_file.is_empty() {
-            return Err("You must set the molecular data file.".into());
+            bail!("You must set the molecular data file.");
         }
     }
 
@@ -31,9 +33,10 @@ pub fn run(
     }
 
     if par.n_species > 0 && !par.do_mol_calcs {
-        return Err("If you only want to do continuum calculations, \
+        bail!(
+            "If you only want to do continuum calculations, \
         you must supply no molecular data files."
-            .into());
+        );
     }
 
     if par.nthreads > 1 {
