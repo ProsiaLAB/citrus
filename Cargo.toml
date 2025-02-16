@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 GSL = "7.0.0"
+anyhow = "1.0.95"
 fitsio = "0.21.6"
 qhull = { git = "https://github.com/LucaCiucci/qhull-rs" }
 serde = { version = "1.0.217", features = ["derive"] }
