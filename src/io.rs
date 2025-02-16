@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 use crate::constants::LOCAL_CMB_TEMP_SI;
 use crate::defaults;
