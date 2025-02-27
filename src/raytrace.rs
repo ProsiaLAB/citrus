@@ -98,7 +98,7 @@ pub struct Face {
     pub simplex_centres: Vec<f64>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FaceBasis {
     pub axes: Vec<Vec<f64>>,
     ///  `r` expresses the location of the N vertices of a simplicial polytope face

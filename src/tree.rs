@@ -7,6 +7,17 @@ use crate::defaults;
 pub const N_RANDOMS: usize = 10000;
 pub const MAX_RECURSION: usize = 100;
 
+type MonitorFn = dyn Fn(
+    i32,                          // num_dims
+    i32,                          // cell_i
+    [f64; defaults::N_DIMS],      // field_origin
+    [f64; defaults::N_DIMS],      // field_width
+    u32,                          // desired_num_points
+    Vec<[f64; defaults::N_DIMS]>, // out_random_locs
+    u32,                          // first_point_i
+    u32,                          // actual_num_points
+);
+
 pub struct TreeRandomConstantType {
     pub par: ConfigInfo,
     pub random_gen_type: GSLRngType,
@@ -29,20 +40,7 @@ pub struct TreeRandomConstantType {
     pub desired_num_points: u32,
     pub do_shuffle: bool,
     pub do_quasi_random: bool,
-    pub monitor_fn: Option<
-        Box<
-            dyn Fn(
-                i32,                          // num_dims
-                i32,                          // cell_i
-                [f64; defaults::N_DIMS],      // field_origin
-                [f64; defaults::N_DIMS],      // field_width
-                u32,                          // desired_num_points
-                Vec<[f64; defaults::N_DIMS]>, // out_random_locs
-                u32,                          // first_point_i
-                u32,                          // actual_num_points
-            ),
-        >,
-    >,
+    pub monitor_fn: Option<Box<MonitorFn>>,
 }
 
 /// Fields of this struct are constant but

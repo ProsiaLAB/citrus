@@ -90,19 +90,19 @@ pub struct Rates {
 ///         The user can specify either, none, or both of these two parameters, with
 /// the following effects:
 ///
-///                 Ids	Names	Effect
+///                 Ids Names Effect
 ///                 ----------------------
-///                 0	0	LAMDA collision partners are assumed and the
+///                 0   0   LAMDA collision partners are assumed and the
 /// association between the density functions and the moldatfiles is essentially
 /// guessed.
 ///
-///                 0	1	par->collPartIds is constructed to contain
+///                 0   1   par->collPartIds is constructed to contain
 /// integers in a sequence from 1 to N. Naturally the user should write matching
 /// collision partner ID integers in their moldatfiles.
 ///
-///                 1	0	LAMDA collision partners are assumed.
+///                 1   0   LAMDA collision partners are assumed.
 ///
-///                 1	1	User will get what they ask for.
+///                 1   1   User will get what they ask for.
 ///                 ----------------------
 ///
 ///         * par->collPartMolWeights: this MUST be present if par->collPartNames
@@ -143,7 +143,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
     let mut i = 0;
     while i < defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS
         && i < par.collisional_partner_names.len()
-        && par.collisional_partner_names[i].len() > 0
+        && !par.collisional_partner_names[i].is_empty()
     {
         i += 1;
     }
@@ -193,8 +193,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
         num_user_set_coll_part_ids = 0;
     } else {
         // Resize the vector to the number of densities
-        par.collisional_partner_ids
-            .resize(par.num_densities as usize, 0);
+        par.collisional_partner_ids.resize(par.num_densities, 0);
     }
 
     if !par.use_abun && num_user_set_coll_part_mol_weights > 0 {
@@ -225,7 +224,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
         num_user_set_nmol_weights = 0;
     } else {
         // Resize the vector to the number of densities
-        par.nmol_weights.resize(par.num_densities as usize, 0.0);
+        par.nmol_weights.resize(par.num_densities, 0.0);
     }
 
     /* Re the interaction between par->collPartIds and par->collPartNames: the
@@ -246,10 +245,10 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
     } else {
         // Resize the vector to the number of densities
         par.collisional_partner_names
-            .resize(par.num_densities as usize, String::new());
-        if num_user_set_coll_part_ids <= 0 {
+            .resize(par.num_densities, String::new());
+        if num_user_set_coll_part_ids == 0 {
             for i in 0..par.num_densities {
-                par.collisional_partner_ids[i as usize] = (i + 1) as i64;
+                par.collisional_partner_ids[i] = (i + 1) as i64;
             }
             num_user_set_coll_part_ids = par.num_densities;
         }
@@ -258,10 +257,10 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
     /* The constraints on the list of CP molecular weights are similar, but NULL +
      * warn that they will be ignored if there are no CP names.
      */
-    if num_user_set_coll_part_mol_weights != par.num_densities || num_user_set_coll_part_names <= 0
+    if num_user_set_coll_part_mol_weights != par.num_densities || num_user_set_coll_part_names == 0
     {
         if num_user_set_coll_part_mol_weights > 0 {
-            if num_user_set_coll_part_names <= 0 {
+            if num_user_set_coll_part_names == 0 {
                 eprintln!(
                     "WARNING: The user-set molecular weights will be ignored because no collision partner names were set."
                 );
@@ -275,18 +274,18 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
     } else {
         // Resize the vector to the number of densities
         par.collisional_partner_mol_weights
-            .resize(par.num_densities as usize, 0.0);
+            .resize(par.num_densities, 0.0);
     }
 
     /* Now we do some sanity checks.
      */
     if num_user_set_coll_part_ids > 0 {
         // Check that they are unique
-        let mut uniuqe_coll_part_ids = vec![0; num_user_set_coll_part_ids as usize];
+        let mut uniuqe_coll_part_ids = vec![0; num_user_set_coll_part_ids];
         for i in 0..num_user_set_coll_part_ids {
-            for j in 0..i {
-                if par.collisional_partner_ids[i] == uniuqe_coll_part_ids[j] {
-                    // return Err("ERROR: The user-set collision partner IDs must be unique.".into());
+            for partner_id in &uniuqe_coll_part_ids {
+                if par.collisional_partner_ids[i] == *partner_id {
+                    bail!("ERROR: The user-set collision partner IDs must be unique.");
                 }
             }
             uniuqe_coll_part_ids[i] = par.collisional_partner_ids[i];

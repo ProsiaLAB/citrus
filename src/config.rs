@@ -14,6 +14,9 @@ use crate::defaults;
 use crate::io::Config;
 use crate::lines::Spec;
 
+type Images = HashMap<String, ImageInfo>;
+type MolDataVec = Vec<MolData>;
+
 #[derive(Debug, Default)]
 pub struct ConfigInfo {
     pub radius: f64,
@@ -118,9 +121,9 @@ pub fn load_config(path: &str) -> Result<Config> {
 /// Parse the configuration file
 /// Arguments:
 ///    - `input_config`: The configuration file
-/// Returns:
+/// # Returns:
 ///   - A tuple containing the configuration information, image information, and molecular data
-///    respectively
+///     respectively
 ///
 /// # Errors
 ///
@@ -129,9 +132,7 @@ pub fn load_config(path: &str) -> Result<Config> {
 /// # Panics
 ///
 /// This function will panic if the index is out of bounds for the neighbor array.
-pub fn parse_config(
-    input_config: Config,
-) -> Result<(ConfigInfo, HashMap<String, ImageInfo>, Option<Vec<MolData>>)> {
+pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<MolDataVec>)> {
     // Extract the parameters and images from the parsed TOML file
     let inpars = input_config.parameters;
 
@@ -144,9 +145,9 @@ pub fn parse_config(
     let mut aux_rotation_matrix: [[f64; 3]; 3];
 
     let mut par = ConfigInfo::default();
-    let mut imgs: HashMap<String, ImageInfo> = HashMap::new();
+    let mut imgs: Images = HashMap::new();
 
-    for (key, _) in &inimgs {
+    for key in inimgs.keys() {
         imgs.insert(key.clone(), ImageInfo::default());
     }
 
@@ -210,19 +211,19 @@ pub fn parse_config(
             par.grid_data_file = inpars
                 .grid_data_file
                 .iter()
-                .take(par.n_species as usize)
+                .take(par.n_species)
                 .flat_map(|s| s.parse::<f64>())
                 .collect();
         }
     }
 
-    if par.n_species <= 0 {
+    if par.n_species == 0 {
         par.mol_data_file.clear();
     } else {
         par.mol_data_file = inpars
             .mol_data_file
             .iter()
-            .take(par.n_species as usize)
+            .take(par.n_species)
             .filter(|filename| !filename.is_empty())
             .cloned()
             .collect();
@@ -230,7 +231,7 @@ pub fn parse_config(
         for filename in &par.mol_data_file {
             let path = Path::new(filename);
             if path.exists() {
-                match fs::metadata(&path) {
+                match fs::metadata(path) {
                     Ok(metadata) => {
                         if metadata.len() == 0 {
                             eprintln!("File {} is empty.", filename);
@@ -306,10 +307,10 @@ pub fn parse_config(
         if par.min_scale <= 0.0 {
             bail!("Minimum scale must be positive.");
         }
-        if par.p_intensity <= 0 {
+        if par.p_intensity == 0 {
             bail!("Number of intensity points must be positive.");
         }
-        if par.sink_points <= 0 {
+        if par.sink_points == 0 {
             bail!("Number of sink points must be positive.");
         }
     }
@@ -325,7 +326,7 @@ pub fn parse_config(
             // Read the grid file in FITS format
             // TODO: Currently not implemented
         }
-        if par.num_densities <= 0 {
+        if par.num_densities == 0 {
             // So here is the deal:
             // LIME either asks to supply the number densities (basically from
             // the grid file) or it calculates them a user defined function.
@@ -339,7 +340,7 @@ pub fn parse_config(
             // For now, we will just set `num_densities` to 1.
             par.num_densities = num_func_densities;
 
-            if par.num_densities <= 0 {
+            if par.num_densities == 0 {
                 bail!("No density values returned");
             }
         }
@@ -379,9 +380,9 @@ pub fn parse_config(
             || temp_point_density.is_nan()
             || temp_point_density <= 0.0
         {
-            for i in 0..defaults::N_DIMS {
-                r[i] = par.min_scale;
-            }
+            r.iter_mut()
+                .take(defaults::N_DIMS)
+                .for_each(|x| *x = par.min_scale);
             temp_point_density = defaults::grid_density(
                 &mut r,
                 par.radius_squ,
@@ -412,10 +413,10 @@ pub fn parse_config(
                         }
                         println!("Random number generator initialized.");
                         let mut found_good_value = false;
-                        for _ in 0..defaults::NUM_RANDOM_DENS as usize {
-                            for i in 0..defaults::N_DIMS {
-                                r[i] = par.radius * (2.0 * GSLRng::uniform(&mut rand_gen) - 1.0);
-                            }
+                        for _ in 0..defaults::NUM_RANDOM_DENS {
+                            r.iter_mut().take(defaults::N_DIMS).for_each(|x| {
+                                *x = par.radius * (2.0 * GSLRng::uniform(&mut rand_gen) - 1.0)
+                            });
                             temp_point_density = defaults::grid_density(
                                 &mut r,
                                 par.radius_squ,
@@ -487,7 +488,7 @@ pub fn parse_config(
 
     // Copy over user set image parameters
     if n_images > 0 {
-        for (key, _) in &inimgs {
+        for key in inimgs.keys() {
             if let Some(img) = imgs.get_mut(key) {
                 img.nchan = inimgs[key].nchan;
                 img.trans = inimgs[key].trans;
@@ -512,7 +513,7 @@ pub fn parse_config(
     }
 
     // Allocate pixel space and parse image information
-    for (key, _) in &inimgs {
+    for key in inimgs.keys() {
         if let Some(img) = imgs.get_mut(key) {
             if img.units.is_empty() {
                 img.num_units = 1; // 1 is Jy/pixel
@@ -529,7 +530,7 @@ pub fn parse_config(
                 img.img_units.clear();
                 img.num_units = 0;
 
-                for (_, token) in tokens.iter().enumerate() {
+                for token in tokens.iter() {
                     // Try parsing each token as an integer
                     match token.trim().parse::<i32>() {
                         Ok(unit) => {
@@ -601,16 +602,14 @@ pub fn parse_config(
                         );
                         eprintln!("{}", msg);
                     }
-                    if img.mol_i < 0 {
-                        if par.n_species > 1 {
-                            let msg = format!(
-                                "WARNING: Image {} did not have ``mol_i`` set, \
+                    if img.mol_i < 0 && par.n_species > 1 {
+                        let msg = format!(
+                            "WARNING: Image {} did not have ``mol_i`` set, \
                                 Therefore, first molecule will be used.",
-                                key
-                            );
-                            eprintln!("{}", msg);
-                            img.mol_i = 0;
-                        }
+                            key
+                        );
+                        eprintln!("{}", msg);
+                        img.mol_i = 0;
                     }
                 } else if img.freq < 0.0 {
                     // User has not set `trans`, nor `freq`
@@ -627,7 +626,7 @@ pub fn parse_config(
             if img.distance <= 0.0 {
                 bail!("You must set distance to source.");
             }
-            img.img_res = img.img_res * cc::ARCSEC_TO_RAD;
+            img.img_res *= cc::ARCSEC_TO_RAD;
             img.pixel = vec![Spec::default(); (img.pxls * img.pxls) as usize];
             for spec in &mut img.pixel {
                 spec.intense = vec![0.0; img.nchan as usize];
@@ -716,14 +715,15 @@ pub fn parse_config(
             }
             // Multiply the two matrices
             let mut temp_matrix = [[0.0; 3]; 3];
-            for i in 0..3 {
-                for j in 0..3 {
-                    temp_matrix[i][j] = 0.0;
-                    for k in 0..3 {
-                        temp_matrix[i][j] += img.rotation_matrix[i][k] * aux_rotation_matrix[k][j];
-                    }
-                }
-            }
+            temp_matrix.iter_mut().enumerate().for_each(|(i, row)| {
+                row.iter_mut().enumerate().for_each(|(j, cell)| {
+                    *cell = img.rotation_matrix[i]
+                        .iter()
+                        .zip(aux_rotation_matrix.iter().map(|row| row[j]))
+                        .map(|(a, b)| a * b)
+                        .sum();
+                });
+            });
         }
     }
 
@@ -731,7 +731,7 @@ pub fn parse_config(
     par.n_cont_images = 0;
     par.do_interpolate_vels = false;
 
-    for (key, _) in &inimgs {
+    for key in inimgs.keys() {
         if let Some(img) = imgs.get_mut(key) {
             if img.do_line {
                 par.n_line_images += 1;
@@ -751,7 +751,7 @@ pub fn parse_config(
             // Open the dust file and check if it exists if it does if it is empty
             let path = Path::new(&par.dust);
             if path.exists() {
-                match fs::metadata(&path) {
+                match fs::metadata(path) {
                     Ok(metadata) => {
                         if metadata.len() == 0 {
                             eprintln!("File {} is empty.", par.dust);
@@ -765,11 +765,8 @@ pub fn parse_config(
         }
     }
 
-    if par.n_line_images > 0 && par.ray_trace_algorithm == 0 && !par.do_pregrid {
-        par.use_vel_func_in_raytrace = true;
-    } else {
-        par.use_vel_func_in_raytrace = false;
-    }
+    par.use_vel_func_in_raytrace =
+        par.n_line_images > 0 && par.ray_trace_algorithm == 0 && !par.do_pregrid;
 
     par.edge_vels_available = false;
 
@@ -785,13 +782,11 @@ pub fn parse_config(
         }
     }
 
-    let mol_data: Option<Vec<MolData>>;
-
-    if par.n_species > 0 {
-        mol_data = defaults::mol_data(par.n_species);
+    let mol_data = if par.n_species > 0 {
+        defaults::mol_data(par.n_species)
     } else {
-        mol_data = None;
-    }
+        None
+    };
 
     // let mut default_density_power: f64;
 

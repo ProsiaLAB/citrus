@@ -47,14 +47,12 @@ pub fn stokes_angles(
     rotation_matrix: [[f64; 3]; 3],
     trig_fncs: &mut [f64],
 ) -> Result<()> {
-    let ndim = 3;
     let b_p = &mut [0.0; 3];
 
     // Rotate `mag_field` to the observer's frame
-    for i in 0..ndim {
-        b_p[i] = 0.0;
-        for j in 0..ndim {
-            b_p[i] += rotation_matrix[i][j] * mag_field[j];
+    for rot_i in &rotation_matrix {
+        for (bp_i, (rot, mag)) in b_p.iter_mut().zip(rot_i.iter().zip(mag_field.iter())) {
+            *bp_i += rot * mag;
         }
     }
 

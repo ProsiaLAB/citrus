@@ -24,46 +24,41 @@ pub fn calc_source_fn(dtau: f64, taylor_cutoff: f64) -> (f64, f64) {
         remant_snu = (1.0 - exp_dtau) / dtau;
     }
 
-    return (remant_snu, exp_dtau);
+    (remant_snu, exp_dtau)
 }
 
 pub fn planck_fn(freq: f64, t_kelvin: f64) -> f64 {
-    let bb: f64;
-
     if t_kelvin < cc::CITRUS_EPS {
-        bb = 0.0;
+        0.0
     } else {
         let wn = freq / cc::SPEED_OF_LIGHT_SI;
         if cc::PLANCK_SI * freq > 100.0 * cc::BOLTZMANN_SI * t_kelvin {
-            bb = 2.0
-                * cc::PLANCK_SI
+            2.0 * cc::PLANCK_SI
                 * wn
                 * wn
                 * freq
-                * (-cc::PLANCK_SI * freq / cc::BOLTZMANN_SI / t_kelvin).exp();
+                * (-cc::PLANCK_SI * freq / cc::BOLTZMANN_SI / t_kelvin).exp()
         } else {
-            bb = 2.0 * cc::PLANCK_SI * wn * wn * freq
-                / ((cc::PLANCK_SI * freq / cc::BOLTZMANN_SI / t_kelvin - 1.0).exp() - 1.0);
+            2.0 * cc::PLANCK_SI * wn * wn * freq
+                / ((cc::PLANCK_SI * freq / cc::BOLTZMANN_SI / t_kelvin - 1.0).exp() - 1.0)
         }
     }
-
-    return bb;
 }
 
 pub fn gauss_line(v: f64, one_on_sigma: f64) -> f64 {
-    return v * v * one_on_sigma * one_on_sigma;
+    v * v * one_on_sigma * one_on_sigma
 }
 
 pub fn dot_product_3d(a: Vec<f64>, b: Vec<f64>) -> f64 {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
 pub fn interpolate_kappa() -> f64 {
-    return 0.0;
+    0.0
 }
 
 pub fn calc_dust_data() -> f64 {
-    return 0.0;
+    0.0
 }
 
 pub fn progress_bar(progress: f64, width: usize) {

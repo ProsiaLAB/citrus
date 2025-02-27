@@ -153,8 +153,8 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
             }
             par.num_densities = 1;
 
-            for i in 0..par.ncell {
-                gp[i].dens = vec![0.0; par.num_densities];
+            for dens in gp.iter_mut().map(|g| &mut g.dens) {
+                dens.resize(par.num_densities, 0.0);
             }
 
             // Open grid file
@@ -333,7 +333,7 @@ fn read_grid() {
     unimplemented!()
 }
 
-fn check_grid_densities(gp: &Vec<Grid>, par: &ConfigInfo) {
+fn check_grid_densities(gp: &[Grid], par: &ConfigInfo) {
     let mut warning_already_issued = false;
 
     for (i, _) in gp.iter().enumerate().take(par.p_intensity) {
@@ -372,12 +372,7 @@ fn check_grid_densities(gp: &Vec<Grid>, par: &ConfigInfo) {
 ///                 .id
 ///                 .neigh
 ///                 .vertx
-fn delaunay(
-    gp: &mut Vec<Grid>,
-    num_points: usize,
-    get_cells: bool,
-    check_sink: bool,
-) -> Result<()> {
+fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: bool) -> Result<()> {
     // pt_array  contains the grid point locations in the format required by qhull.
     let pt_array: Vec<Vec<f64>> = gp.iter().map(|point| point.x.to_vec()).collect();
 
@@ -435,7 +430,7 @@ fn delaunay(
                     .neighbors()
                     .ok_or_else(|| anyhow!("Failed to get neighbors"))?;
                 gp[id as usize].num_neigh = neighbors.size(&qh);
-                if gp[id as usize].num_neigh <= 0 {
+                if gp[id as usize].num_neigh == 0 {
                     bail!("ERROR: `qhull` failed silently. A smoother `grid_density` might help.");
                 }
                 gp[id as usize].neigh = vec![None; gp[id as usize].num_neigh];
@@ -468,8 +463,11 @@ fn delaunay(
             }
             for i in 0..defaults::N_DIMS + 1 {
                 let id_i = point_ids_this_facet[i];
-                for j in 0..defaults::N_DIMS + 1 {
-                    let id_j = point_ids_this_facet[j];
+                for (j, &id_j) in point_ids_this_facet
+                    .iter()
+                    .enumerate()
+                    .take(defaults::N_DIMS + 1)
+                {
                     if i != j {
                         let mut k: usize = 0;
                         while gp[id_i as usize].neigh[k].is_some() {
@@ -494,14 +492,12 @@ fn delaunay(
         }
     }
 
-    for ppi in 0..num_points {
-        let mut j = 0;
-        for k in 0..gp[ppi].num_neigh {
-            if gp[ppi].neigh[k].is_some() {
-                j += 1;
-            }
-        }
-        gp[ppi].num_neigh = j;
+    for gp_point in &mut gp[..num_points] {
+        gp_point.num_neigh = gp_point
+            .neigh
+            .iter()
+            .filter(|neigh| neigh.is_some())
+            .count();
     }
 
     if get_cells {
@@ -516,11 +512,10 @@ fn delaunay(
         let mut fi: usize = 0;
         for facet in qh.all_facets() {
             if !facet.upper_delaunay() {
-                let mut i: usize = 0;
                 let neighbors = facet
                     .neighbors()
                     .ok_or_else(|| anyhow!("Failed to get neighbors"))?;
-                for neighbor in neighbors.iter() {
+                for (i, neighbor) in neighbors.iter().enumerate() {
                     if neighbor.upper_delaunay() {
                         dc[fi].neigh[i] = None;
                     } else {
@@ -537,7 +532,6 @@ fn delaunay(
                             bail!("ERROR: Something went wrong with the Delaunay triangulation");
                         }
                     }
-                    i += 1;
                 }
                 fi += 1;
             }
@@ -557,8 +551,8 @@ fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32> {
     let mut n_extra_sinks = 0;
     let mut indices: Vec<usize> = vec![0; num_points];
 
-    for up_i in 0..num_points {
-        indices[up_i] = up_i;
+    for (i, index) in indices.iter_mut().enumerate().take(num_points) {
+        *index = i;
     }
 
     let mut up_i = 0;
@@ -575,9 +569,7 @@ fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32> {
         }
         n_extra_sinks += 1;
 
-        let i = indices[down_i];
-        indices[down_i] = indices[up_i];
-        indices[up_i] = i;
+        indices.swap(up_i, down_i);
 
         // do the swap
         let (before, after) = gp.as_mut_slice().split_at_mut(down_i + 1);
@@ -623,32 +615,39 @@ fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32> {
 /// Calculate the distance between grid points
 /// The distance between two points is calculated as the Euclidean distance
 /// between the two points.
-fn dist_calc(gp: &mut Vec<Grid>, num_points: usize) {
-    for i in 0..num_points {
-        gp[i].dir = vec![Point::default(); gp[i].num_neigh];
-        gp[i].ds = vec![0.0; gp[i].num_neigh];
-        for k in 0..gp[i].num_neigh {
-            for l in 0..3 {
-                if let Some(ref neigh) = gp[i].neigh[k] {
-                    gp[i].dir[k].x[l] = neigh.x[l] - gp[i].x[l];
-                }
-            }
-            gp[i].ds[k] = (gp[i].dir[k].x[0] * gp[i].dir[k].x[0]
-                + gp[i].dir[k].x[1] * gp[i].dir[k].x[1]
-                + gp[i].dir[k].x[2] * gp[i].dir[k].x[2])
-                .sqrt();
+fn dist_calc(gp: &mut [Grid], num_points: usize) {
+    for gp_point in &mut gp[..num_points] {
+        gp_point.dir = vec![Point::default(); gp_point.num_neigh];
+        gp_point.ds = vec![0.0; gp_point.num_neigh];
 
-            for l in 0..3 {
-                gp[i].dir[k].xn[l] = gp[i].dir[k].x[l] / gp[i].ds[k];
+        for (k, (dir, ds)) in gp_point
+            .dir
+            .iter_mut()
+            .zip(gp_point.ds.iter_mut())
+            .enumerate()
+        {
+            if let Some(ref neigh) = gp_point.neigh[k] {
+                dir.x
+                    .iter_mut()
+                    .zip(neigh.x.iter().zip(&gp_point.x))
+                    .for_each(|(dir_x, (&neigh_x, &gp_x))| *dir_x = neigh_x - gp_x);
+
+                *ds = dir.x.iter().map(|&v| v * v).sum::<f64>().sqrt();
+
+                dir.xn
+                    .iter_mut()
+                    .zip(&dir.x)
+                    .for_each(|(xn, &x)| *xn = x / *ds);
             }
         }
-        gp[i].nphot = defaults::RAYS_PER_POINT;
+
+        gp_point.nphot = defaults::RAYS_PER_POINT;
     }
 }
 
 /// Write the grid points to a VTK file
 /// The VTK file is written in the unstructured points format.
-fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<()> {
+fn write_vtk_unstructured_points(gp: &[Grid], par: &ConfigInfo) -> Result<()> {
     let pt_array: Vec<Vec<f64>> = gp.iter().map(|point| point.x.to_vec()).collect();
 
     let mut file = File::create(&par.grid_file)?;
@@ -660,13 +659,14 @@ fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<()>
     writeln!(file, "DATASET UNSTRUCTURED_GRID")?;
     writeln!(file, "POINTS {} double", par.ncell)?;
 
-    for i in 0..par.ncell {
+    for gp_i in &gp[..par.ncell] {
         writeln!(
             file,
             "{:.6e} {:.6e} {:.6e}",
-            gp[i].x[0], gp[i].x[1], gp[i].x[2]
+            gp_i.x[0], gp_i.x[1], gp_i.x[2]
         )?;
     }
+
     let CollectedCoords {
         coords,
         count: _,
@@ -715,18 +715,18 @@ fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<()>
     writeln!(file, "POINT_DATA {}", par.ncell)?;
     writeln!(file, "SCALARS H2_density float 1")?;
     writeln!(file, "LOOKUP_TABLE default")?;
-    for i in 0..par.ncell {
-        writeln!(file, "{:.6e}", gp[i].dens[0])?;
+    for gp_i in &gp[..par.ncell] {
+        writeln!(file, "{:.6e}", gp_i.dens[0])?;
     }
     writeln!(file, "SCALARS Mol_density float 1")?;
     writeln!(file, "LOOKUP_TABLE default")?;
     if par.n_species > 0 {
-        for i in 0..par.ncell {
-            let mol_pop = gp[i]
+        for gp_i in &gp[..par.ncell] {
+            let mol_pop = gp_i
                 .mol
                 .as_ref()
                 .ok_or_else(|| anyhow!("Failed to get molecular data"))?;
-            writeln!(file, "{:.6e}", mol_pop[0].abun * gp[i].dens[0])?;
+            writeln!(file, "{:.6e}", mol_pop[0].abun * gp_i.dens[0])?;
         }
     } else {
         for _ in 0..par.ncell {
@@ -735,28 +735,25 @@ fn write_vtk_unstructured_points(gp: &Vec<Grid>, par: &ConfigInfo) -> Result<()>
     }
     writeln!(file, "SCALARS Gas_temperature float 1")?;
     writeln!(file, "LOOKUP_TABLE default")?;
-    for i in 0..par.ncell {
-        writeln!(file, "{:.6e}", gp[i].t[0])?;
+    for gp_i in &gp[..par.ncell] {
+        writeln!(file, "{:.6e}", gp_i.t[0])?;
     }
     writeln!(file, "SCALARS velocity float 1")?;
-    for i in 0..par.ncell {
-        let length = (gp[i].vel[0] * gp[i].vel[0]
-            + gp[i].vel[1] * gp[i].vel[1]
-            + gp[i].vel[2] * gp[i].vel[2])
-            .sqrt();
+    for gp_i in &gp[..par.ncell] {
+        let length = gp_i.vel.iter().map(|&v| v * v).sum::<f64>().sqrt();
         if length > 0.0 {
             writeln!(
                 file,
                 "{:.6e} {:.6e} {:.6e}",
-                gp[i].vel[0] / length,
-                gp[i].vel[1] / length,
-                gp[i].vel[2] / length
+                gp_i.vel[0] / length,
+                gp_i.vel[1] / length,
+                gp_i.vel[2] / length
             )?;
         } else {
             writeln!(
                 file,
                 "{:.6e} {:.6e} {:.6e}",
-                gp[i].vel[0], gp[i].vel[1], gp[i].vel[2]
+                gp_i.vel[0], gp_i.vel[1], gp_i.vel[2]
             )?;
         }
     }
