@@ -1,5 +1,8 @@
 use anyhow::bail;
 use anyhow::Result;
+
+use crate::types::RMatrix;
+use crate::types::RVector;
 /// This function rotates the B-field vector from the model frame to the observer
 /// frame, then calculates and returns some useful values which will in function
 /// `source_fn_polarized()` make it easy to obtain the Stokes parameters of polarized
@@ -42,26 +45,13 @@ use anyhow::Result;
 ///         Bp^T = B^T * rotation_matrix
 ///
 /// where ^T denotes transpose.
-pub fn stokes_angles(
-    mag_field: &mut [f64; 3],
-    rotation_matrix: [[f64; 3]; 3],
-    trig_fncs: &mut [f64],
-) -> Result<()> {
-    let b_p = &mut [0.0; 3];
-
-    // Rotate `mag_field` to the observer's frame
-    for rot_i in &rotation_matrix {
-        for (bp_i, (rot, mag)) in b_p.iter_mut().zip(rot_i.iter().zip(mag_field.iter())) {
-            *bp_i += rot * mag;
-        }
-    }
+pub fn stokes_angles(mag_field: &RVector, rotation_matrix: &RMatrix) -> Result<()> {
+    let b_p = rotation_matrix.t().dot(mag_field);
+    let mut trig_fncs = RVector::zeros(3);
 
     // Square of length of B projected into the observer XY plane
     let b_xy_squared = b_p[0] * b_p[0] + b_p[1] * b_p[1];
     if b_xy_squared == 0.0 {
-        trig_fncs[0] = 0.;
-        trig_fncs[1] = 0.;
-        trig_fncs[2] = 0.;
         bail!("B field is zero");
     }
 

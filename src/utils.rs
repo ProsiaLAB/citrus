@@ -49,10 +49,6 @@ pub fn gauss_line(v: f64, one_on_sigma: f64) -> f64 {
     v * v * one_on_sigma * one_on_sigma
 }
 
-pub fn dot_product_3d(a: Vec<f64>, b: Vec<f64>) -> f64 {
-    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
-}
-
 pub fn interpolate_kappa() -> f64 {
     0.0
 }

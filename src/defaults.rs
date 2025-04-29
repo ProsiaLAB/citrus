@@ -1,6 +1,7 @@
 // Default functions for `citrus` interface
 use crate::collparts::MolData;
 use crate::interface;
+use crate::types::RVector;
 
 pub const N_DIMS: usize = 3;
 
@@ -21,12 +22,12 @@ pub const TREE_EXP: f64 = 2.0;
 pub const RAYS_PER_POINT: i64 = 200;
 
 pub fn grid_density(
-    r: &mut [f64],
+    r: &mut [f64; 3],
     radius_squ: f64,
     num_densities: usize,
     grid_dens_global_max: f64,
 ) -> f64 {
-    let mut val: Vec<f64> = vec![0.0; 99];
+    let mut val = RVector::zeros(99);
 
     let r_squared = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
 

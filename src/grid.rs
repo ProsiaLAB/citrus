@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
-use std::mem::swap;
+use std::mem;
 use std::num::ParseFloatError;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -14,79 +14,64 @@ use rgsl::Rng as GSLRng;
 
 use crate::config::ConfigInfo;
 use crate::constants as cc;
+use crate::defaults::{self, N_DIMS};
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
-use crate::{defaults, utils};
+use crate::types::RVector;
+use crate::utils;
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct Point {
-    pub x: [f64; defaults::N_DIMS],
-    pub xn: [f64; defaults::N_DIMS],
+    pub x: [f64; N_DIMS],
+    pub xn: [f64; N_DIMS],
 }
 
-#[derive(Clone)]
+#[derive(Default)]
 pub struct Grid {
     pub id: i32,
-    pub x: [f64; defaults::N_DIMS],
-    pub vel: [f64; defaults::N_DIMS],
+    pub x: [f64; N_DIMS],
+    pub vel: [f64; N_DIMS],
     pub mag_field: [f64; 3], // Magnetic field can only be 3D
-    pub v1: Vec<f64>,
-    pub v2: Vec<f64>,
-    pub v3: Vec<f64>,
+    pub v1: RVector,
+    pub v2: RVector,
+    pub v3: RVector,
     pub num_neigh: usize,
     pub dir: Vec<Point>,
     pub neigh: Vec<Option<Box<Grid>>>,
-    pub w: Vec<f64>,
+    pub w: RVector,
     pub sink: bool,
     pub nphot: i64,
     pub conv: i64,
-    pub dens: Vec<f64>,
+    pub dens: RVector,
     pub t: [f64; 2],
     pub dopb_turb: f64,
-    pub ds: Vec<f64>,
+    pub ds: RVector,
     pub mol: Option<Vec<Populations>>,
     pub cont: Vec<ContinuumLine>,
 }
 
-impl Default for Grid {
-    fn default() -> Self {
+impl Grid {
+    pub fn new() -> Self {
         Grid {
-            v1: Vec::new(),
-            v2: Vec::new(),
-            v3: Vec::new(),
-            dir: Vec::new(),
-            neigh: Vec::new(),
-            w: Vec::new(),
-            ds: Vec::new(),
-            dens: Vec::new(),
             t: [-1.0; 2],
-            mag_field: [0.0; 3],
-            conv: 0,
-            cont: Vec::new(),
-            dopb_turb: 0.0,
-            sink: false,
-            nphot: 0,
-            num_neigh: 0,
             id: -1,
-            mol: None,
-            x: [0.0; defaults::N_DIMS],
-            vel: [0.0; defaults::N_DIMS],
+            ..Default::default()
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Default)]
 pub struct Cell {
-    pub vertex: [Option<Box<Grid>>; defaults::N_DIMS + 1],
-    pub neigh: [Option<Box<Cell>>; defaults::N_DIMS * 2],
+    pub vertex: [Option<Box<Grid>>; N_DIMS + 1],
+    pub neigh: [Option<Box<Cell>>; N_DIMS * 2],
     pub id: u32,
-    pub centre: [f64; defaults::N_DIMS],
+    pub centre: [f64; N_DIMS],
 }
 
 pub struct Link {
     pub id: u32,
     pub gis: [u32; 2],
-    pub vels: Vec<f64>,
+    pub vels: RVector,
 }
 
 pub struct MoleculeInfo {
@@ -107,13 +92,13 @@ pub struct GridInfo {
     pub mols: Vec<MoleculeInfo>,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct Keyword {
     pub datatype: i64,
     pub keyname: String,
     pub comment: String,
     pub char_value: String,
-    pub int_value: i32,
+    pub int_value: usize,
     pub float_value: f64,
     pub double_value: f64,
     pub bool_value: bool,
@@ -154,7 +139,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
             par.num_densities = 1;
 
             for dens in gp.iter_mut().map(|g| &mut g.dens) {
-                dens.resize(par.num_densities, 0.0);
+                dens.fill(0.0);
             }
 
             // Open grid file
@@ -163,7 +148,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
 
             for (i, line) in reader.lines().enumerate().take(par.p_intensity) {
                 let line = line?;
-                let values: Vec<f64> = line
+                let values: RVector = line
                     .split_whitespace()
                     .map(|v| {
                         v.parse::<f64>().map_err(|e| {
@@ -171,7 +156,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
                             e
                         })
                     })
-                    .collect::<Result<Vec<f64>, ParseFloatError>>()?;
+                    .collect::<Result<RVector, ParseFloatError>>()?;
 
                 if values.len() != 9 {
                     bail!("Error: Expected 9 values");
@@ -206,7 +191,6 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
 
                 gp[i].sink = false;
                 gp[i].dir = Vec::new();
-                gp[i].ds = Vec::new();
                 gp[i].neigh = Vec::new();
                 gp[i].mag_field = [0.0; 3];
 
@@ -248,7 +232,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
                     gp[i].dopb_turb = 0.0;
 
                     // Initialize velocity array to 0.0
-                    for j in 0..defaults::N_DIMS {
+                    for j in 0..N_DIMS {
                         gp[i].vel[j] = 0.0;
                     }
 
@@ -300,7 +284,13 @@ pub fn read_or_build_grid(par: &mut ConfigInfo) -> Result<Vec<Grid>> {
 
 fn read_grid_init(par: &mut ConfigInfo) {
     let num_desired_kwds = 3;
-    let mut desired_kwds = vec![Keyword::default(); num_desired_kwds];
+    let mut desired_kwds = {
+        let mut v = Vec::with_capacity(num_desired_kwds);
+        for _ in 0..num_desired_kwds {
+            v.push(Keyword::default());
+        }
+        v
+    };
 
     desired_kwds[0].datatype = 3; // LIME DOUBLE
     desired_kwds[0].keyname = "RADIUS  ".to_string();
@@ -374,7 +364,7 @@ fn check_grid_densities(gp: &[Grid], par: &ConfigInfo) {
 ///                 .vertx
 fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: bool) -> Result<()> {
     // pt_array  contains the grid point locations in the format required by qhull.
-    let pt_array: Vec<Vec<f64>> = gp.iter().map(|point| point.x.to_vec()).collect();
+    let pt_array: Vec<[f64; N_DIMS]> = gp.iter().map(|point| point.x).collect();
 
     let CollectedCoords {
         coords,
@@ -433,7 +423,13 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
                 if gp[id as usize].num_neigh == 0 {
                     bail!("ERROR: `qhull` failed silently. A smoother `grid_density` might help.");
                 }
-                gp[id as usize].neigh = vec![None; gp[id as usize].num_neigh];
+                gp[id as usize].neigh = {
+                    let mut v = Vec::with_capacity(gp[id as usize].num_neigh);
+                    for _ in 0..gp[id as usize].num_neigh {
+                        v.push(None);
+                    }
+                    v
+                };
             }
             Err(_) => {
                 bail!("Failed to get point ID");
@@ -441,7 +437,7 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
         }
     }
 
-    let mut point_ids_this_facet: [i32; defaults::N_DIMS + 1] = [0; defaults::N_DIMS + 1];
+    let mut point_ids_this_facet: [i32; N_DIMS + 1] = [0; N_DIMS + 1];
     let mut num_cells: u64 = 0;
     for facet in qh.all_facets() {
         if !facet.upper_delaunay() {
@@ -461,13 +457,9 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
                     }
                 }
             }
-            for i in 0..defaults::N_DIMS + 1 {
+            for i in 0..N_DIMS + 1 {
                 let id_i = point_ids_this_facet[i];
-                for (j, &id_j) in point_ids_this_facet
-                    .iter()
-                    .enumerate()
-                    .take(defaults::N_DIMS + 1)
-                {
+                for (j, &id_j) in point_ids_this_facet.iter().enumerate().take(N_DIMS + 1) {
                     if i != j {
                         let mut k: usize = 0;
                         while gp[id_i as usize].neigh[k].is_some() {
@@ -501,7 +493,7 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
     }
 
     if get_cells {
-        let mut dc: Vec<Box<Cell>> = Vec::with_capacity(num_cells as usize);
+        let mut dc: Vec<Cell> = Vec::with_capacity(num_cells as usize);
         let mut fi: usize = 0;
         for facet in qh.all_facets() {
             if !facet.upper_delaunay() {
@@ -523,7 +515,7 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
                         let mut neighbor_not_found = true;
                         while ffi < num_cells as usize && neighbor_not_found {
                             if dc[ffi].id == neighbor.id() {
-                                dc[fi].neigh[i] = Some(dc[ffi].clone());
+                                dc[fi].neigh[i] = Some(Box::new(mem::take(&mut dc[ffi])));
                                 neighbor_not_found = false;
                             }
                             ffi += 1;
@@ -573,7 +565,7 @@ fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32> {
 
         // do the swap
         let (before, after) = gp.as_mut_slice().split_at_mut(down_i + 1);
-        swap(&mut before[down_i], &mut after[up_i - down_i]);
+        mem::swap(&mut before[down_i], &mut after[up_i - down_i]);
 
         // retain the id values as sequential
         gp[down_i].id = down_i as i32;
@@ -602,7 +594,7 @@ fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32> {
                 let ng_i = neigh_grid.id;
                 if ng_i != indices[ng_i as usize] as i32 {
                     let index = indices[ng_i as usize] as usize;
-                    let new_neigh = gp[index].clone();
+                    let new_neigh = mem::take(&mut gp[index]);
                     gp[i].neigh[j] = Some(Box::new(new_neigh));
                 }
             }
@@ -617,8 +609,14 @@ fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32> {
 /// between the two points.
 fn dist_calc(gp: &mut [Grid], num_points: usize) {
     for gp_point in &mut gp[..num_points] {
-        gp_point.dir = vec![Point::default(); gp_point.num_neigh];
-        gp_point.ds = vec![0.0; gp_point.num_neigh];
+        gp_point.dir = {
+            let mut v = Vec::with_capacity(gp_point.num_neigh);
+            for _ in 0..gp_point.num_neigh {
+                v.push(Point::default());
+            }
+            v
+        };
+        gp_point.ds.fill(0.0);
 
         for (k, (dir, ds)) in gp_point
             .dir
@@ -648,7 +646,7 @@ fn dist_calc(gp: &mut [Grid], num_points: usize) {
 /// Write the grid points to a VTK file
 /// The VTK file is written in the unstructured points format.
 fn write_vtk_unstructured_points(gp: &[Grid], par: &ConfigInfo) -> Result<()> {
-    let pt_array: Vec<Vec<f64>> = gp.iter().map(|point| point.x.to_vec()).collect();
+    let pt_array: Vec<[f64; N_DIMS]> = gp.iter().map(|point| point.x).collect();
 
     let mut file = File::create(&par.grid_file)?;
 

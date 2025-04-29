@@ -1,8 +1,10 @@
+use crate::types::RVector;
+
 pub struct GridPointData {
-    pub jbar: Vec<f64>,
-    pub phot: Vec<f64>,
-    pub vfac: Vec<f64>,
-    pub vfac_loc: Vec<f64>,
+    pub jbar: RVector,
+    pub phot: RVector,
+    pub vfac: RVector,
+    pub vfac_loc: RVector,
 }
 pub struct Blend {
     pub mol_j: i64,

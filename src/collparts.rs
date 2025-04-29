@@ -4,67 +4,59 @@ use anyhow::Result;
 use crate::defaults;
 
 use crate::config::ConfigInfo;
+use crate::types::IVector;
+use crate::types::RVector;
+use crate::types::UVector;
 
 #[derive(Debug, Default)]
 pub struct CollisionalPartnerData {
-    pub down: Vec<f64>,
-    pub temp: Vec<f64>,
-    pub collisional_partner_id: i64,
-    pub ntemp: i64,
-    pub ntrans: i64,
-    pub lcl: Vec<i64>,
-    pub lcu: Vec<i64>,
-    pub density_index: i64,
+    pub down: RVector,
+    pub temp: RVector,
+    pub collisional_partner_id: isize,
+    pub ntemp: isize,
+    pub ntrans: isize,
+    pub lcl: IVector,
+    pub lcu: IVector,
+    pub density_index: isize,
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MolData {
-    pub nlev: i64,
-    pub nline: i64,
-    pub npart: i64,
-    pub lal: Vec<i64>,
-    pub lau: Vec<i64>,
-    pub aeinst: Vec<f64>,
-    pub freq: Vec<f64>,
-    pub beinstu: Vec<f64>,
-    pub beinstl: Vec<f64>,
-    pub eterm: Vec<f64>,
-    pub gstat: Vec<f64>,
-    pub gir: Vec<f64>,
-    pub cmb: Vec<f64>,
+    pub nlev: isize,
+    pub nline: isize,
+    pub npart: isize,
+    pub lal: IVector,
+    pub lau: IVector,
+    pub aeinst: RVector,
+    pub freq: RVector,
+    pub beinstu: RVector,
+    pub beinstl: RVector,
+    pub eterm: RVector,
+    pub gstat: RVector,
+    pub gir: RVector,
+    pub cmb: RVector,
     pub amass: f64,
     pub part: CollisionalPartnerData,
     pub mol_name: String,
 }
 
-impl Default for MolData {
-    fn default() -> Self {
+impl MolData {
+    pub fn new() -> Self {
         MolData {
             nlev: -1,
             nline: -1,
             npart: -1,
             amass: -1.0,
-            part: CollisionalPartnerData::default(),
-            lal: Vec::new(),
-            lau: Vec::new(),
-            aeinst: Vec::new(),
-            freq: Vec::new(),
-            beinstu: Vec::new(),
-            beinstl: Vec::new(),
-            eterm: Vec::new(),
-            gstat: Vec::new(),
-            cmb: Vec::new(),
-            gir: Vec::new(),
-            mol_name: String::new(),
+            ..Default::default()
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rates {
-    pub t_binlow: i64,
-    pub interp_coeff: f64,
+    pub t_binlow: isize,
+    pub interp_coeff: isize,
 }
 
 /// This deals with four user-settable list parameters which relate to collision
@@ -193,7 +185,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
         num_user_set_coll_part_ids = 0;
     } else {
         // Resize the vector to the number of densities
-        par.collisional_partner_ids.resize(par.num_densities, 0);
+        par.collisional_partner_ids = UVector::from_elem(par.num_densities, 0);
     }
 
     if !par.use_abun && num_user_set_coll_part_mol_weights > 0 {
@@ -224,7 +216,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
         num_user_set_nmol_weights = 0;
     } else {
         // Resize the vector to the number of densities
-        par.nmol_weights.resize(par.num_densities, 0.0);
+        par.nmol_weights = RVector::from_elem(par.num_densities, 0.0);
     }
 
     /* Re the interaction between par->collPartIds and par->collPartNames: the
@@ -248,7 +240,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
             .resize(par.num_densities, String::new());
         if num_user_set_coll_part_ids == 0 {
             for i in 0..par.num_densities {
-                par.collisional_partner_ids[i] = (i + 1) as i64;
+                par.collisional_partner_ids[i] = i + 1;
             }
             num_user_set_coll_part_ids = par.num_densities;
         }
@@ -273,8 +265,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
         }
     } else {
         // Resize the vector to the number of densities
-        par.collisional_partner_mol_weights
-            .resize(par.num_densities, 0.0);
+        par.collisional_partner_mol_weights = RVector::from_elem(par.num_densities, 0.0);
     }
 
     /* Now we do some sanity checks.

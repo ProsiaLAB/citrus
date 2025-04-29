@@ -13,4 +13,5 @@ pub mod raytrace;
 pub mod solver;
 pub mod source;
 pub mod tree;
+pub mod types;
 pub mod utils;

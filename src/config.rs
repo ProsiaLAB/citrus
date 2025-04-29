@@ -5,14 +5,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::bail;
 use anyhow::Result;
+use ndarray::array;
 use rgsl::rng::algorithms as GSLRngAlgorithms;
 use rgsl::Rng as GSLRng;
 
 use crate::collparts::MolData;
 use crate::constants as cc;
-use crate::defaults;
+use crate::defaults::{self, N_DIMS};
 use crate::io::Config;
 use crate::lines::Spec;
+use crate::types::{RMatrix, RVector, UVector};
 
 type Images = HashMap<String, ImageInfo>;
 type MolDataVec = Vec<MolData>;
@@ -24,17 +26,17 @@ pub struct ConfigInfo {
     pub cmb_temp: f64,
     pub sink_points: usize,
     pub p_intensity: usize,
-    pub blend: i32,
-    pub ray_trace_algorithm: i32,
-    pub sampling_algorithm: i32,
-    pub sampling: i32,
+    pub blend: isize,
+    pub ray_trace_algorithm: isize,
+    pub sampling_algorithm: isize,
+    pub sampling: isize,
     pub lte_only: bool,
     pub init_lte: bool,
-    pub anti_alias: i32,
+    pub anti_alias: isize,
     pub polarization: bool,
-    pub nthreads: i32,
-    pub nsolve_iters: i32,
-    pub collisional_partner_user_set_flags: i32,
+    pub nthreads: isize,
+    pub nsolve_iters: usize,
+    pub collisional_partner_user_set_flags: isize,
     pub output_file: String,
     pub binoutput_file: String,
     pub grid_file: String,
@@ -49,27 +51,27 @@ pub struct ConfigInfo {
     pub taylor_cutoff: f64,
     pub grid_density_global_max: f64,
     pub ncell: usize,
-    pub n_images: u32,
+    pub n_images: usize,
     pub n_species: usize,
     pub num_densities: usize,
     pub do_pregrid: bool,
     pub num_grid_density_maxima: i32,
     pub num_dims: usize,
-    pub n_line_images: i32,
-    pub n_cont_images: i32,
-    pub data_flags: i32,
-    pub n_solve_iters_done: i32,
+    pub n_line_images: usize,
+    pub n_cont_images: usize,
+    pub data_flags: isize,
+    pub n_solve_iters_done: usize,
     pub do_interpolate_vels: bool,
     pub use_abun: bool,
     pub do_mol_calcs: bool,
     pub use_vel_func_in_raytrace: bool,
     pub edge_vels_available: bool,
-    pub nmol_weights: Vec<f64>,
+    pub nmol_weights: RVector,
     pub grid_density_max_locations: Vec<[f64; 3]>,
-    pub grid_density_max_values: Vec<f64>,
-    pub collisional_partner_mol_weights: Vec<f64>,
-    pub collisional_partner_ids: Vec<i64>,
-    pub grid_data_file: Vec<f64>,
+    pub grid_density_max_values: RVector,
+    pub collisional_partner_mol_weights: RVector,
+    pub collisional_partner_ids: UVector,
+    pub grid_data_file: RVector,
     pub mol_data_file: Vec<String>,
     pub collisional_partner_names: Vec<String>,
     pub grid_out_files: Vec<String>,
@@ -79,7 +81,7 @@ pub struct ConfigInfo {
 #[derive(Debug, Default)]
 pub struct ImageInfo {
     pub do_line: bool,
-    pub nchan: i64,
+    pub nchan: usize,
     pub trans: i64,
     pub mol_i: i64,
     pub pixel: Vec<Spec>,
@@ -87,7 +89,7 @@ pub struct ImageInfo {
     pub img_res: f64,
     pub pxls: i64,
     pub units: String,
-    pub img_units: Vec<i32>,
+    pub img_units: Vec<isize>,
     pub num_units: i64,
     pub freq: f64,
     pub bandwidth: f64,
@@ -99,7 +101,7 @@ pub struct ImageInfo {
     pub posang: f64,
     pub azimuth: f64,
     pub distance: f64,
-    pub rotation_matrix: [[f64; 3]; 3],
+    pub rotation_matrix: RMatrix,
     pub do_interpolate_vels: bool,
 }
 
@@ -137,18 +139,17 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
     let inpars = input_config.parameters;
 
     let inimgs = input_config.images;
-    let n_images = inimgs.len() as u32;
+    let n_images = inimgs.len();
 
     // Some variables to be used later
-    let mut r: Vec<f64> = vec![0.0; 3];
+    let mut r = [0.0; 3];
     let mut temp_point_density: f64;
-    let mut aux_rotation_matrix: [[f64; 3]; 3];
 
     let mut par = ConfigInfo::default();
     let mut imgs: Images = HashMap::new();
 
     for key in inimgs.keys() {
-        imgs.insert(key.clone(), ImageInfo::default());
+        imgs.insert(key.to_string(), ImageInfo::default());
     }
 
     // Map pars to config
@@ -179,15 +180,14 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
 
     par.grid_out_files = inpars
         .grid_out_files
-        .iter()
+        .into_iter()
         .take(defaults::NUM_OF_GRID_STAGES)
-        .cloned()
         .collect();
     par.write_grid_at_stage.fill(false);
 
     if par.pre_grid.is_empty() && par.restart {
         par.n_species = 0;
-        par.grid_data_file.clear();
+        par.grid_data_file.fill(0.0);
     } else {
         par.n_species = inpars
             .mol_data_file
@@ -204,7 +204,7 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
             .count();
 
         if num_grid_data_files == 0 {
-            par.grid_data_file.clear();
+            par.grid_data_file.fill(0.0);
         } else if num_grid_data_files != par.n_species {
             bail!("Number of grid data files different from number of species.");
         } else {
@@ -222,10 +222,9 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
     } else {
         par.mol_data_file = inpars
             .mol_data_file
-            .iter()
+            .into_iter()
             .take(par.n_species)
             .filter(|filename| !filename.is_empty())
-            .cloned()
             .collect();
 
         for filename in &par.mol_data_file {
@@ -247,45 +246,35 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
 
     par.collisional_partner_ids = inpars
         .collisional_partner_ids
-        .iter()
+        .into_iter()
         .take(defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS)
-        .cloned()
-        .collect();
+        .collect::<UVector>();
 
     par.nmol_weights = inpars
         .nmol_weights
-        .iter()
+        .into_iter()
         .take(defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS)
-        .cloned()
         .collect();
 
     par.collisional_partner_names = inpars
         .collisional_partner_names
-        .iter()
+        .into_iter()
         .take(defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS)
-        .cloned()
         .collect();
 
     par.collisional_partner_mol_weights = inpars
         .collisional_partner_mol_weights
-        .iter()
+        .into_iter()
         .take(defaults::MAX_NUM_OF_COLLISIONAL_PARTNERS)
-        .cloned()
         .collect();
 
     par.grid_density_max_values = inpars
         .grid_density_max_values
-        .iter()
+        .into_iter()
         .take(defaults::MAX_NUM_HIGH)
-        .cloned()
         .collect();
 
-    par.grid_density_max_locations = inpars
-        .grid_density_max_locations
-        .iter()
-        .take(defaults::MAX_NUM_HIGH)
-        .cloned()
-        .collect::<Vec<[f64; 3]>>();
+    par.grid_density_max_locations = inpars.grid_density_max_locations;
 
     let mut i = 0;
     while i < defaults::MAX_NUM_HIGH && par.grid_density_max_values[i] >= 0.0 {
@@ -380,9 +369,7 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
             || temp_point_density.is_nan()
             || temp_point_density <= 0.0
         {
-            r.iter_mut()
-                .take(defaults::N_DIMS)
-                .for_each(|x| *x = par.min_scale);
+            r.iter_mut().take(N_DIMS).for_each(|x| *x = par.min_scale);
             temp_point_density = defaults::grid_density(
                 &mut r,
                 par.radius_squ,
@@ -414,7 +401,7 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
                         println!("Random number generator initialized.");
                         let mut found_good_value = false;
                         for _ in 0..defaults::NUM_RANDOM_DENS {
-                            r.iter_mut().take(defaults::N_DIMS).for_each(|x| {
+                            r.iter_mut().take(N_DIMS).for_each(|x| {
                                 *x = par.radius * (2.0 * GSLRng::uniform(&mut rand_gen) - 1.0)
                             });
                             temp_point_density = defaults::grid_density(
@@ -484,7 +471,7 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
 
     par.taylor_cutoff = (24.0 * f64::EPSILON).powf(0.25);
     par.n_images = n_images;
-    par.num_dims = defaults::N_DIMS;
+    par.num_dims = N_DIMS;
 
     // Copy over user set image parameters
     if n_images > 0 {
@@ -532,7 +519,7 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
 
                 for token in tokens.iter() {
                     // Try parsing each token as an integer
-                    match token.trim().parse::<i32>() {
+                    match token.trim().parse() {
                         Ok(unit) => {
                             img.img_units.push(unit);
                         }
@@ -588,7 +575,7 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
                         );
                         eprintln!("{}", msg);
                     }
-                } else if img.nchan <= 0 || img.bandwidth <= 0.0 && img.vel_res <= 0.0 {
+                } else if img.nchan == 0 || img.bandwidth <= 0.0 && img.vel_res <= 0.0 {
                     bail!("You must set either nchan, bandwidth, or velres for a line image.");
                 }
                 // Check that we have keywords which allow us to calculate the image
@@ -627,10 +614,16 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
                 bail!("You must set distance to source.");
             }
             img.img_res *= cc::ARCSEC_TO_RAD;
-            img.pixel = vec![Spec::default(); (img.pxls * img.pxls) as usize];
+            img.pixel = {
+                let mut v = Vec::with_capacity((img.pxls * img.pxls) as usize);
+                for _ in 0..(img.pxls * img.pxls) {
+                    v.push(Spec::default());
+                }
+                v
+            };
             for spec in &mut img.pixel {
-                spec.intense = vec![0.0; img.nchan as usize];
-                spec.tau = vec![0.0; img.nchan as usize];
+                spec.intense = RVector::zeros(img.nchan);
+                spec.tau = RVector::zeros(img.nchan);
             }
 
             // Calculate the rotation matrix
@@ -683,47 +676,38 @@ pub fn parse_config(input_config: Config) -> Result<(ConfigInfo, Images, Option<
                 // For the present position angle is not implemented
                 // for the theta/phi scheme, so we will just load the
                 // the identity matrix
-                img.rotation_matrix = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+                img.rotation_matrix = RMatrix::eye(3);
             } else {
                 // Load position angle matrix
                 let cos_pa = img.posang.cos();
                 let sin_pa = img.posang.sin();
-                img.rotation_matrix = [
+                img.rotation_matrix = array![
                     [cos_pa, -sin_pa, 0.0],
                     [sin_pa, cos_pa, 0.0],
-                    [0.0, 0.0, 1.0],
+                    [0.0, 0.0, 1.0]
                 ];
             }
-            if do_theta_phi {
+            let aux_rotation_matrix = if do_theta_phi {
                 // Load phi rotation matrix R_phi
                 let cos_phi = img.phi.cos();
                 let sin_phi = img.phi.sin();
-                aux_rotation_matrix = [
+                array![
                     [cos_phi, 0.0, -sin_phi],
                     [0.0, 1.0, 0.0],
-                    [sin_phi, 0.0, cos_phi],
-                ];
+                    [sin_phi, 0.0, cos_phi]
+                ]
             } else {
                 // Load inclination matrix R_incl
                 let cos_incl = (img.incl + std::f64::consts::PI).cos();
                 let sin_incl = (img.incl + std::f64::consts::PI).sin();
-                aux_rotation_matrix = [
+                array![
                     [cos_incl, 0.0, -sin_incl],
                     [0.0, 1.0, 0.0],
-                    [sin_incl, 0.0, cos_incl],
-                ];
-            }
+                    [sin_incl, 0.0, cos_incl]
+                ]
+            };
             // Multiply the two matrices
-            let mut temp_matrix = [[0.0; 3]; 3];
-            temp_matrix.iter_mut().enumerate().for_each(|(i, row)| {
-                row.iter_mut().enumerate().for_each(|(j, cell)| {
-                    *cell = img.rotation_matrix[i]
-                        .iter()
-                        .zip(aux_rotation_matrix.iter().map(|row| row[j]))
-                        .map(|(a, b)| a * b)
-                        .sum();
-                });
-            });
+            let _temp_matrix = img.rotation_matrix.dot(&aux_rotation_matrix);
         }
     }
 
