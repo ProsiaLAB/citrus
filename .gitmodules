@@ -1,0 +1,3 @@
+[submodule "vendor/qhull"]
+	path = vendor/qhull
+	url = https://github.com/qhull/qhull.git
