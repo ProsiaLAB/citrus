@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::types::RVector;
 
 #[derive(Debug, Default)]
@@ -6,7 +8,7 @@ pub struct ContinuumLine {
     pub knu: f64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Spec {
     pub intense: RVector,
     pub tau: RVector,

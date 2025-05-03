@@ -48,12 +48,16 @@ pub fn temperature(x: f64, y: f64, z: f64) -> f64 {
     }
 }
 
-pub fn abundance() -> f64 {
+pub const fn abundance() -> f64 {
     1e-9
 }
 
-pub fn doppler() -> f64 {
+pub const fn doppler() -> f64 {
     200.0
+}
+
+pub const fn gas_to_dust_ratio() -> f64 {
+    100.0
 }
 
 pub fn velocity(x: f64, y: f64, z: f64) -> [f64; 3] {

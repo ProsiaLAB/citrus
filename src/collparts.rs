@@ -3,10 +3,9 @@ use anyhow::Result;
 
 use crate::defaults;
 
-use crate::config::ConfigInfo;
+use crate::config::Parameters;
 use crate::types::IVector;
 use crate::types::RVector;
-use crate::types::UVector;
 
 #[derive(Debug, Default)]
 pub struct CollisionalPartnerData {
@@ -59,36 +58,22 @@ pub struct Rates {
     pub interp_coeff: isize,
 }
 
-/// This deals with four user-settable list parameters which relate to collision
-/// partners and their number densities: par->collPartIds, par->nMolWeights,
-/// par->collPartMolWeights and par->collPartNames. We have to see if these
+/// This deals with four user-settable fields of [`ConfigInfo`] which relate
+/// to collision partners and their number densities: `collisional_partner_ids`, `nmol_weights`,
+/// `collisional_partner_mol_weights` and `collisional_partner_names`. We have to see if these
 /// (optional) parameters were set, do some basic checks on them, and if they were
 /// set make sure they match the number of density values, which by this time should
-/// be stored in par->numDensities.
+/// be stored in `num_densities` field of [`ConfigInfo`].
 ///
-///         * par->collPartIds: this list acts as a link between the N density
-/// function returns (I'm using here N as shorthand for par->numDensities) and the M
-/// collision partner ID integers found in the moldatfiles. This allows us to
-/// associate density functions with the collision partner transition rates provided
-/// in the moldatfiles.
 ///
-///         * par->collPartNames: essentially this has only cosmetic importance
-/// since it has no effect on the functioning of LIME, only on the names of the
-/// collision partners which are printed to stdout. Its main purpose is to reassure
-/// the user who has provided transition rates for a non-LAMDA collision species in
-/// their moldatfile that they are actually getting these values and not some
-/// mysterious reversion to LAMDA.
 ///
-///         The user can specify either, none, or both of these two parameters, with
+/// The user can specify either, none, or both of these two parameters, with
 /// the following effects:
 ///
-///                 Ids Names Effect
-///                 ----------------------
-///                 0   0   LAMDA collision partners are assumed and the
-/// association between the density functions and the moldatfiles is essentially
-/// guessed.
-///
-///                 0   1   par->collPartIds is constructed to contain
+///  Ids | Names | Effect
+///  --- | ----- | ------------
+///  0   | 0      | LAMDA collision partners are assumed and the association between the density functions and the moldatfiles is essentia
+///  0   | 1      | par->collPartIds is constructed to contain
 /// integers in a sequence from 1 to N. Naturally the user should write matching
 /// collision partner ID integers in their moldatfiles.
 ///
@@ -104,7 +89,7 @@ pub struct Rates {
 ///
 ///         * par->nMolWeights: this list gives the weights to be applied to the N
 /// density values when calculating molecular densities from abundances.
-pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
+pub fn check_user_density_weights(par: &mut Parameters) -> Result<()> {
     par.collisional_partner_user_set_flags = 0;
 
     // Get the numbers of elements set by the user for each of the 4 parameters:
@@ -185,7 +170,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
         num_user_set_coll_part_ids = 0;
     } else {
         // Resize the vector to the number of densities
-        par.collisional_partner_ids = UVector::from_elem(par.num_densities, 0);
+        par.collisional_partner_ids = vec![0; par.num_densities];
     }
 
     if !par.use_abun && num_user_set_coll_part_mol_weights > 0 {
@@ -216,7 +201,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
         num_user_set_nmol_weights = 0;
     } else {
         // Resize the vector to the number of densities
-        par.nmol_weights = RVector::from_elem(par.num_densities, 0.0);
+        par.nmol_weights = vec![0.0; par.num_densities];
     }
 
     /* Re the interaction between par->collPartIds and par->collPartNames: the
@@ -265,7 +250,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
         }
     } else {
         // Resize the vector to the number of densities
-        par.collisional_partner_mol_weights = RVector::from_elem(par.num_densities, 0.0);
+        par.collisional_partner_mol_weights = vec![0.0; par.num_densities];
     }
 
     /* Now we do some sanity checks.
@@ -276,7 +261,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
         for i in 0..num_user_set_coll_part_ids {
             for partner_id in &uniuqe_coll_part_ids {
                 if par.collisional_partner_ids[i] == *partner_id {
-                    bail!("ERROR: The user-set collision partner IDs must be unique.");
+                    bail!("The user-set collision partner IDs must be unique.");
                 }
             }
             uniuqe_coll_part_ids[i] = par.collisional_partner_ids[i];
@@ -289,7 +274,7 @@ pub fn check_user_density_weights(par: &mut ConfigInfo) -> Result<()> {
             sum += par.nmol_weights[i];
         }
         if sum <= 0.0 {
-            bail!("ERROR: The user-set molecular weights must be positive.");
+            bail!("The user-set molecular weights must be positive.");
         }
     }
     Ok(())

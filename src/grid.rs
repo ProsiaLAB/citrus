@@ -12,7 +12,7 @@ use qhull::QhBuilder;
 use rgsl::rng::algorithms as GSLRngAlgorithms;
 use rgsl::Rng as GSLRng;
 
-use crate::config::ConfigInfo;
+use crate::config::Parameters;
 use crate::constants as cc;
 use crate::defaults::{self, N_DIMS};
 use crate::lines::ContinuumLine;
@@ -47,7 +47,7 @@ pub struct Grid {
     pub dopb_turb: f64,
     pub ds: RVector,
     pub mol: Option<Vec<Populations>>,
-    pub cont: Vec<ContinuumLine>,
+    pub cont: ContinuumLine,
 }
 
 impl Grid {
@@ -121,7 +121,7 @@ pub fn set_default_grid(num_points: usize, num_species: usize) -> Vec<Grid> {
     gp
 }
 
-pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
+pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
     let rand_gen_opt = GSLRng::new(GSLRngAlgorithms::ranlxs2());
 
     match rand_gen_opt {
@@ -159,12 +159,12 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
                     .collect::<Result<RVector, ParseFloatError>>()?;
 
                 if values.len() != 9 {
-                    bail!("Error: Expected 9 values");
+                    bail!("Expected 9 values");
                 }
 
                 let id = values[0] as i32;
                 if id >= par.p_intensity as i32 {
-                    bail!("Error: Invalid grid point ID: {}", id);
+                    bail!("Invalid grid point ID: {}", id);
                 }
 
                 gp[i].id = id;
@@ -186,7 +186,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
                 if let Some(ref mut molecule) = gp[i].mol {
                     molecule[0].abun = 1e-9;
                 } else {
-                    bail!("Error: No molecular data found");
+                    bail!("No molecular data found");
                 }
 
                 gp[i].sink = false;
@@ -222,7 +222,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
                         molecule[0].abun = 0.0;
                         molecule[0].nmol = 0.0;
                     } else {
-                        bail!("Error: No molecular data found");
+                        bail!("No molecular data found");
                     }
 
                     gp[i].dens[0] = cc::CITRUS_EPS; // Assuming CITRUS_EPS is defined
@@ -273,7 +273,7 @@ pub fn pre_define(par: &mut ConfigInfo, gp: &mut Vec<Grid>) -> Result<()> {
     Ok(())
 }
 
-pub fn read_or_build_grid(par: &mut ConfigInfo) -> Result<Vec<Grid>> {
+pub fn read_or_build_grid(par: &mut Parameters) -> Result<Vec<Grid>> {
     par.data_flags = 0;
     if !par.grid_in_file.is_empty() {
         read_grid_init(par);
@@ -282,7 +282,7 @@ pub fn read_or_build_grid(par: &mut ConfigInfo) -> Result<Vec<Grid>> {
     Ok(Vec::new())
 }
 
-fn read_grid_init(par: &mut ConfigInfo) {
+fn read_grid_init(par: &mut Parameters) {
     let num_desired_kwds = 3;
     let mut desired_kwds = {
         let mut v = Vec::with_capacity(num_desired_kwds);
@@ -320,10 +320,10 @@ fn read_grid_init(par: &mut ConfigInfo) {
 /// check of the validity of the state of completeness of the grid data (as encoded
 /// in the returned argument dataFlags) is left to the calling routine.
 fn read_grid() {
-    unimplemented!()
+    todo!()
 }
 
-fn check_grid_densities(gp: &[Grid], par: &ConfigInfo) {
+fn check_grid_densities(gp: &[Grid], par: &Parameters) {
     let mut warning_already_issued = false;
 
     for (i, _) in gp.iter().enumerate().take(par.p_intensity) {
@@ -421,7 +421,7 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
                     .ok_or_else(|| anyhow!("Failed to get neighbors"))?;
                 gp[id as usize].num_neigh = neighbors.size(&qh);
                 if gp[id as usize].num_neigh == 0 {
-                    bail!("ERROR: `qhull` failed silently. A smoother `grid_density` might help.");
+                    bail!("`qhull` failed silently. A smoother `grid_density` might help.");
                 }
                 gp[id as usize].neigh = {
                     let mut v = Vec::with_capacity(gp[id as usize].num_neigh);
@@ -473,7 +473,7 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
                                     }
                                 }
                                 None => {
-                                    bail!("ERROR: `qhull` failed silently. A smoother `grid_density` might help.");
+                                    bail!("`qhull` failed silently. A smoother `grid_density` might help.");
                                 }
                             }
                         }
@@ -521,7 +521,7 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
                             ffi += 1;
                         }
                         if ffi >= num_cells as usize && neighbor_not_found {
-                            bail!("ERROR: Something went wrong with the Delaunay triangulation");
+                            bail!("Something went wrong with the Delaunay triangulation");
                         }
                     }
                 }
@@ -645,7 +645,7 @@ fn dist_calc(gp: &mut [Grid], num_points: usize) {
 
 /// Write the grid points to a VTK file
 /// The VTK file is written in the unstructured points format.
-fn write_vtk_unstructured_points(gp: &[Grid], par: &ConfigInfo) -> Result<()> {
+fn write_vtk_unstructured_points(gp: &[Grid], par: &Parameters) -> Result<()> {
     let pt_array: Vec<[f64; N_DIMS]> = gp.iter().map(|point| point.x).collect();
 
     let mut file = File::create(&par.grid_file)?;

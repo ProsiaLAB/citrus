@@ -5,7 +5,7 @@ p_intensity = 4000
 sink_points = 3000
 dust = "jena_thin_e6.tab"
 mol_data_file = ["hco+@xpol.dat"]
-sampling = 2
+sampling = "UniformExact"
 nsolve_iters = 14
 reset_RNG = 0
 collisional_partner_ids = [1]
@@ -24,7 +24,7 @@ source_velocity = 0.0
 azimuth = 0.0
 inclination = 0.0
 position_angle = 0.0
-unit = 0
+unit = "kelvin"
 filename = "image_01.fits"
 
 # Once can add more images by adding more sections like [image-##]

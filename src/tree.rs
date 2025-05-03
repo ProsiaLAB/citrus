@@ -1,7 +1,7 @@
 use rgsl::{QRng as GSLQRng, Rng as GSLRng};
 use rgsl::{QRngType as GSLQRngType, RngType as GSLRngType};
 
-use crate::config::ConfigInfo;
+use crate::config::Parameters;
 use crate::defaults::N_DIMS;
 
 pub const N_RANDOMS: usize = 10000;
@@ -19,7 +19,7 @@ type MonitorFn = dyn Fn(
 );
 
 pub struct TreeRandomConstantType {
-    pub par: ConfigInfo,
+    pub par: Parameters,
     pub random_gen_type: GSLRngType,
     pub random_seed: u64,
     pub quasi_random_gen_type: GSLQRngType,

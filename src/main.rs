@@ -44,8 +44,8 @@ fn main() -> Result<()> {
     )?;
 
     // Parse the loaded `Config` struct
-    let (mut par, mut img, mut mol_data) = parse_config(input_config)?;
+    let (mut par, mut imgs, mol_data) = parse_config(input_config)?;
 
-    engine::run(&mut par, &mut img, &mut mol_data)?;
+    engine::run(&mut par, &mut imgs, &mol_data)?;
     Ok(())
 }
