@@ -4,3 +4,6 @@
 [submodule "vendor/cfitsio"]
 	path = vendor/cfitsio
 	url = https://github.com/HEASARC/cfitsio.git
+[submodule "vendor/gsl"]
+	path = vendor/gsl
+	url = https://git.savannah.gnu.org/git/gsl.git
