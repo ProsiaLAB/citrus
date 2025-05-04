@@ -1,8 +1,8 @@
-use rgsl::{QRng as GSLQRng, Rng as GSLRng};
-use rgsl::{QRngType as GSLQRngType, RngType as GSLRngType};
+use rand::rngs::StdRng;
 
 use crate::config::Parameters;
 use crate::defaults::N_DIMS;
+use crate::utils::qrng::Halton;
 
 pub const N_RANDOMS: usize = 10000;
 pub const MAX_RECURSION: usize = 100;
@@ -20,9 +20,9 @@ type MonitorFn = dyn Fn(
 
 pub struct TreeRandomConstantType {
     pub par: Parameters,
-    pub random_gen_type: GSLRngType,
+    pub random_gen_type: StdRng,
     pub random_seed: u64,
-    pub quasi_random_gen_type: GSLQRngType,
+    pub quasi_random_gen_type: Halton,
     pub num_dims: i64,
     pub num_in_randoms: i64,
     pub verbosity: i64,
@@ -51,10 +51,9 @@ pub struct TreeRandomInternalType {
     pub in_random_locs: Vec<[f64; N_DIMS]>,
     /// Random number generator - should be the value
     /// returned by gsl_rng_alloc()
-    pub random_gen: GSLRng,
-    /// Quasi-random number generator - should be the value
-    /// returned by gsl_qrng_alloc()
-    pub quasi_random_gen: GSLQRng,
+    pub random_gen: StdRng,
+    /// Quasi-random number generator
+    pub quasi_random_gen: Halton,
 }
 
 pub struct SubCellType {
