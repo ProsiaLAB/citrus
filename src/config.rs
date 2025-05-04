@@ -37,7 +37,7 @@ pub struct Parameters {
     #[serde(default)]
     pub blend: isize,
     #[serde(default)]
-    pub ray_trace_algorithm: isize,
+    pub ray_trace_algorithm: RayTraceAlgorithm,
     #[serde(default)]
     pub sampling_algorithm: isize,
     #[serde(default)]
@@ -153,6 +153,13 @@ pub enum Sampling {
     #[default]
     UniformExact,
     UniformBiased,
+}
+
+#[derive(Deserialize, Debug, Default, PartialEq)]
+pub enum RayTraceAlgorithm {
+    Legacy,
+    #[default]
+    Modern,
 }
 
 /// The `Image` struct represents the configuration for an image to be generated.
@@ -736,8 +743,9 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
         }
     }
 
-    pars.use_vel_func_in_raytrace =
-        pars.n_line_images > 0 && pars.ray_trace_algorithm == 0 && !pars.do_pregrid;
+    pars.use_vel_func_in_raytrace = pars.n_line_images > 0
+        && pars.ray_trace_algorithm == RayTraceAlgorithm::Legacy
+        && !pars.do_pregrid;
 
     pars.edge_vels_available = false;
 
