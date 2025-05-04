@@ -34,11 +34,11 @@ pub enum RayThroughCellsError {
 /// NOTE: it is assumed that `vertex[i]` is opposite the face that abuts with
 /// * `neigh[i]` for all `i`.
 #[derive(Debug, Default)]
-pub struct Simplex<'a> {
+pub struct Simplex {
     pub id: usize,
     pub vertex: UVector,
     pub centres: RVector,
-    pub neigh: Vec<Option<&'a Simplex<'a>>>,
+    pub neigh: Vec<Option<usize>>, // use index, not reference
 }
 
 /// This struct is meant to record all relevant information about the
