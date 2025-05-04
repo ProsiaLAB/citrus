@@ -8,21 +8,17 @@ use ndarray_linalg::Solve;
 use ndarray_linalg::SVD;
 
 use crate::collparts::MolData;
-use crate::config::Image;
-use crate::config::Parameters;
 use crate::config::RayTraceAlgorithm;
+use crate::config::{Image, Parameters};
 use crate::constants as cc;
 use crate::defaults::N_DIMS;
 use crate::grid::delaunay;
-use crate::grid::Cell;
-use crate::grid::Grid;
+use crate::grid::{Cell, Grid};
 use crate::interface::gas_to_dust_ratio;
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
 use crate::types::{RMatrix, RVector, UVector};
-use crate::utils::get_dtg;
-use crate::utils::get_dust_temp;
-use crate::utils::{calc_dust_data, interpolate_kappa, planck_fn};
+use crate::utils::{calc_dust_data, get_dtg, get_dust_temp, interpolate_kappa, planck_fn};
 
 // Define error types for the raytrace module
 #[derive(Debug)]
