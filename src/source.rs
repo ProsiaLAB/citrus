@@ -1,8 +1,8 @@
 use anyhow::bail;
 use anyhow::Result;
 
-use crate::types::RMatrix;
-use crate::types::RVector;
+use crate::types::{RMatrix, RVector};
+
 /// This function rotates the B-field vector from the model frame to the observer
 /// frame, then calculates and returns some useful values which will in function
 /// `source_fn_polarized()` make it easy to obtain the Stokes parameters of polarized

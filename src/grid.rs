@@ -3,10 +3,10 @@ use std::io::{BufRead, BufReader, Write};
 use std::mem;
 use std::num::ParseFloatError;
 
-use anyhow::anyhow;
-use anyhow::bail;
 use anyhow::Result;
-use qhull::helpers::{prepare_delaunay_points, CollectedCoords};
+use anyhow::{anyhow, bail};
+use qhull::helpers::prepare_delaunay_points;
+use qhull::helpers::CollectedCoords;
 use qhull::QhBuilder;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};

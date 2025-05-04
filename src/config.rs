@@ -7,8 +7,7 @@ use anyhow::Context;
 use anyhow::Result;
 use ndarray::array;
 use rand::rngs::StdRng;
-use rand::Rng;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use serde::Deserialize; // StdRng is a good general-purpose algorithm
 
 use crate::collparts::MolData;

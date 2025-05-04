@@ -4,8 +4,7 @@ use anyhow::Result;
 use crate::defaults;
 
 use crate::config::Parameters;
-use crate::types::IVector;
-use crate::types::RVector;
+use crate::types::{IVector, RVector};
 
 #[derive(Debug, Default)]
 pub struct CollisionalPartnerData {
