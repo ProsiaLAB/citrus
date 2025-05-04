@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
 use ndarray::array;
-use rgsl::rng::algorithms as GSLRngAlgorithms;
-use rgsl::Rng as GSLRng;
-use serde::Deserialize;
+use rand::rngs::StdRng;
+use rand::Rng;
+use rand::SeedableRng;
+use serde::Deserialize; // StdRng is a good general-purpose algorithm
 
 use crate::collparts::MolData;
 use crate::constants as cc;
@@ -425,60 +425,51 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
                 pars.grid_density_global_max = temp_point_density;
             } else {
                 // Hmm ok, let's try a spread of random locations
-                let rand_gen_opt = GSLRng::new(GSLRngAlgorithms::ranlxs2());
-
-                match rand_gen_opt {
-                    Some(mut rand_gen) => {
-                        if defaults::FIX_RANDOM_SEEDS {
-                            rand_gen.set(140978);
-                        } else {
-                            rand_gen.set(
-                                SystemTime::now()
-                                    .duration_since(UNIX_EPOCH)
-                                    .expect("Time went backwards")
-                                    .as_secs() as usize,
-                            );
-                        }
-                        println!("Random number generator initialized.");
-                        let mut found_good_value = false;
-                        for _ in 0..defaults::NUM_RANDOM_DENS {
-                            r.iter_mut().take(N_DIMS).for_each(|x| {
-                                *x = pars.radius * (2.0 * GSLRng::uniform(&mut rand_gen) - 1.0)
-                            });
-                            temp_point_density = defaults::grid_density(
-                                &mut r,
-                                pars.radius_squ,
-                                pars.num_densities,
-                                pars.grid_density_global_max,
-                            );
-                            if !temp_point_density.is_infinite()
-                                && !temp_point_density.is_nan()
-                                && temp_point_density > 0.0
-                            {
-                                found_good_value = true;
-                                break;
-                            }
-                        }
-                        if found_good_value {
-                            if temp_point_density > pars.grid_density_global_max {
-                                pars.grid_density_global_max = temp_point_density;
-                            }
-                        } else if pars.num_grid_density_maxima > 0 {
-                            // Test any maxima that user might have provided
-                            pars.grid_density_global_max = pars.grid_density_max_values[0];
-                            for i in 1..pars.num_grid_density_maxima as usize {
-                                if pars.grid_density_max_values[i] > pars.grid_density_global_max {
-                                    pars.grid_density_global_max = pars.grid_density_max_values[i];
-                                }
-                            }
-                        } else {
-                            bail!("Could not find a non-pathological grid density value.");
+                let mut rand_gen = if defaults::FIX_RANDOM_SEEDS {
+                    // Use fixed seed for reproducibility
+                    // Note: SeedableRng::seed_from_u64 takes a u64 seed
+                    StdRng::seed_from_u64(140978)
+                } else {
+                    // Seed from the system's entropy source for non-reproducible randomness
+                    // StdRng::from_entropy is a good way to get a random seed
+                    StdRng::try_from_os_rng()
+                        .expect("Failed to seed random number generator from entropy")
+                };
+                println!("Random number generator initialized.");
+                let mut found_good_value = false;
+                for _ in 0..defaults::NUM_RANDOM_DENS {
+                    r.iter_mut().take(N_DIMS).for_each(|x| {
+                        // Generate a random f64 in the range [-pars.radius, pars.radius)
+                        *x = rand_gen.random_range(-pars.radius..pars.radius);
+                    });
+                    temp_point_density = defaults::grid_density(
+                        &mut r,
+                        pars.radius_squ,
+                        pars.num_densities,
+                        pars.grid_density_global_max,
+                    );
+                    if !temp_point_density.is_infinite()
+                        && !temp_point_density.is_nan()
+                        && temp_point_density > 0.0
+                    {
+                        found_good_value = true;
+                        break;
+                    }
+                }
+                if found_good_value {
+                    if temp_point_density > pars.grid_density_global_max {
+                        pars.grid_density_global_max = temp_point_density;
+                    }
+                } else if pars.num_grid_density_maxima > 0 {
+                    // Test any maxima that user might have provided
+                    pars.grid_density_global_max = pars.grid_density_max_values[0];
+                    for i in 1..pars.num_grid_density_maxima as usize {
+                        if pars.grid_density_max_values[i] > pars.grid_density_global_max {
+                            pars.grid_density_global_max = pars.grid_density_max_values[i];
                         }
                     }
-
-                    None => {
-                        bail!("Could not initialize random number generator.");
-                    }
+                } else {
+                    bail!("Could not find a non-pathological grid density value.");
                 }
             }
         }

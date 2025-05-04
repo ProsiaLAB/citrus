@@ -2,15 +2,14 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::mem;
 use std::num::ParseFloatError;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::anyhow;
 use anyhow::bail;
 use anyhow::Result;
 use qhull::helpers::{prepare_delaunay_points, CollectedCoords};
 use qhull::QhBuilder;
-use rgsl::rng::algorithms as GSLRngAlgorithms;
-use rgsl::Rng as GSLRng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 use crate::config::Parameters;
 use crate::constants as cc;
@@ -122,130 +121,120 @@ pub fn set_default_grid(num_points: usize, num_species: usize) -> Vec<Grid> {
 }
 
 pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
-    let rand_gen_opt = GSLRng::new(GSLRngAlgorithms::ranlxs2());
+    let mut rand_gen = if defaults::FIX_RANDOM_SEEDS {
+        // Use fixed seed for reproducibility
+        // Note: SeedableRng::seed_from_u64 takes a u64 seed
+        StdRng::seed_from_u64(6611304)
+    } else {
+        // Seed from the system's entropy source for non-reproducible randomness
+        // StdRng::from_entropy is a good way to get a random seed
+        StdRng::try_from_os_rng().expect("Failed to seed random number generator from entropy")
+    };
+    par.num_densities = 1;
+    for dens in gp.iter_mut().map(|g| &mut g.dens) {
+        dens.fill(0.0);
+    }
 
-    match rand_gen_opt {
-        Some(mut rand_gen) => {
-            if defaults::FIX_RANDOM_SEEDS {
-                rand_gen.set(6611304);
-            } else {
-                rand_gen.set(
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Time went backwards")
-                        .as_secs() as usize,
-                );
-            }
-            par.num_densities = 1;
+    // Open grid file
+    let file = File::open(&par.pre_grid)?;
+    let reader = BufReader::new(file);
 
-            for dens in gp.iter_mut().map(|g| &mut g.dens) {
-                dens.fill(0.0);
-            }
+    for (i, line) in reader.lines().enumerate().take(par.p_intensity) {
+        let line = line?;
+        let values: RVector = line
+            .split_whitespace()
+            .map(|v| {
+                v.parse::<f64>().map_err(|e| {
+                    eprintln!("Failed to parse {}: {}", v, e);
+                    e
+                })
+            })
+            .collect::<Result<RVector, ParseFloatError>>()?;
 
-            // Open grid file
-            let file = File::open(&par.pre_grid)?;
-            let reader = BufReader::new(file);
-
-            for (i, line) in reader.lines().enumerate().take(par.p_intensity) {
-                let line = line?;
-                let values: RVector = line
-                    .split_whitespace()
-                    .map(|v| {
-                        v.parse::<f64>().map_err(|e| {
-                            eprintln!("Failed to parse {}: {}", v, e);
-                            e
-                        })
-                    })
-                    .collect::<Result<RVector, ParseFloatError>>()?;
-
-                if values.len() != 9 {
-                    bail!("Expected 9 values");
-                }
-
-                let id = values[0] as i32;
-                if id >= par.p_intensity as i32 {
-                    bail!("Invalid grid point ID: {}", id);
-                }
-
-                gp[i].id = id;
-                gp[i].x[0] = values[1];
-                gp[i].x[1] = values[2];
-                gp[i].x[2] = values[3];
-
-                gp[i].dens[0] = values[4];
-
-                gp[i].t[0] = values[5];
-                gp[i].t[1] = values[5];
-
-                gp[i].vel[0] = values[6];
-                gp[i].vel[1] = values[7];
-                gp[i].vel[2] = values[8];
-
-                gp[i].dopb_turb = 200.0;
-
-                if let Some(ref mut molecule) = gp[i].mol {
-                    molecule[0].abun = 1e-9;
-                } else {
-                    bail!("No molecular data found");
-                }
-
-                gp[i].sink = false;
-                gp[i].dir = Vec::new();
-                gp[i].neigh = Vec::new();
-                gp[i].mag_field = [0.0; 3];
-
-                utils::progress_bar(i as f64 / par.p_intensity as f64, 50);
-            }
-
-            // check grid densities
-            if par.do_mol_calcs {
-                check_grid_densities(gp, par);
-            }
-            // if random generator was set assign densities for the rest of the grid
-            let mut i = par.p_intensity; // Initialize `i` manually since we want to control it
-            while i < par.ncell {
-                let x = 2.0 * GSLRng::uniform(&mut rand_gen) - 1.0;
-                let y = 2.0 * GSLRng::uniform(&mut rand_gen) - 1.0;
-                let z = 2.0 * GSLRng::uniform(&mut rand_gen) - 1.0;
-
-                if (x * x + y * y + z * z) < 1.0 {
-                    let scale = par.radius * (1.0 / (x * x + y * y + z * z)).sqrt();
-
-                    gp[i].id = i as i32;
-                    gp[i].x[0] = x * scale;
-                    gp[i].x[1] = y * scale;
-                    gp[i].x[2] = z * scale;
-                    gp[i].sink = true;
-
-                    // Update the molecule data if it's available
-                    if let Some(molecule) = &mut gp[i].mol {
-                        molecule[0].abun = 0.0;
-                        molecule[0].nmol = 0.0;
-                    } else {
-                        bail!("No molecular data found");
-                    }
-
-                    gp[i].dens[0] = cc::CITRUS_EPS; // Assuming CITRUS_EPS is defined
-                    gp[i].t[0] = par.cmb_temp;
-                    gp[i].t[1] = par.cmb_temp;
-                    gp[i].mag_field = [0.0; 3];
-                    gp[i].dopb_turb = 0.0;
-
-                    // Initialize velocity array to 0.0
-                    for j in 0..N_DIMS {
-                        gp[i].vel[j] = 0.0;
-                    }
-
-                    // Continue to next iteration
-                    i += 1;
-                } else {
-                    // If the condition is not met, retry this iteration
-                    // Do not increment `i` when the condition fails
-                }
-            }
+        if values.len() != 9 {
+            bail!("Expected 9 values");
         }
-        None => {
-            bail!("Failed to create random number generator");
+
+        let id = values[0] as i32;
+        if id >= par.p_intensity as i32 {
+            bail!("Invalid grid point ID: {}", id);
+        }
+
+        gp[i].id = id;
+        gp[i].x[0] = values[1];
+        gp[i].x[1] = values[2];
+        gp[i].x[2] = values[3];
+
+        gp[i].dens[0] = values[4];
+
+        gp[i].t[0] = values[5];
+        gp[i].t[1] = values[5];
+
+        gp[i].vel[0] = values[6];
+        gp[i].vel[1] = values[7];
+        gp[i].vel[2] = values[8];
+
+        gp[i].dopb_turb = 200.0;
+
+        if let Some(ref mut molecule) = gp[i].mol {
+            molecule[0].abun = 1e-9;
+        } else {
+            bail!("No molecular data found");
+        }
+
+        gp[i].sink = false;
+        gp[i].dir = Vec::new();
+        gp[i].neigh = Vec::new();
+        gp[i].mag_field = [0.0; 3];
+
+        utils::progress_bar(i as f64 / par.p_intensity as f64, 50);
+    }
+
+    // check grid densities
+    if par.do_mol_calcs {
+        check_grid_densities(gp, par);
+    }
+
+    // if random generator was set assign densities for the rest of the grid
+    let mut i = par.p_intensity; // Initialize `i` manually since we want to control it
+    while i < par.ncell {
+        let x = rand_gen.random_range(-1.0..1.0);
+        let y = rand_gen.random_range(-1.0..1.0);
+        let z = rand_gen.random_range(-1.0..1.0);
+
+        if (x * x + y * y + z * z) < 1.0 {
+            let scale = par.radius * (1.0f64 / (x * x + y * y + z * z)).sqrt();
+
+            gp[i].id = i as i32;
+            gp[i].x[0] = x * scale;
+            gp[i].x[1] = y * scale;
+            gp[i].x[2] = z * scale;
+            gp[i].sink = true;
+
+            // Update the molecule data if it's available
+            if let Some(molecule) = &mut gp[i].mol {
+                molecule[0].abun = 0.0;
+                molecule[0].nmol = 0.0;
+            } else {
+                bail!("No molecular data found");
+            }
+
+            gp[i].dens[0] = cc::CITRUS_EPS; // Assuming CITRUS_EPS is defined
+            gp[i].t[0] = par.cmb_temp;
+            gp[i].t[1] = par.cmb_temp;
+            gp[i].mag_field = [0.0; 3];
+            gp[i].dopb_turb = 0.0;
+
+            // Initialize velocity array to 0.0
+            for j in 0..N_DIMS {
+                gp[i].vel[j] = 0.0;
+            }
+
+            // Continue to next iteration
+            i += 1;
+        } else {
+            // If the condition is not met, retry this iteration
+            // Do not increment `i` when the condition fails
         }
     }
 
