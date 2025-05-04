@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-GSL = "7.0.0"
 anyhow = "1.0.95"
 bitflags = "2.9.0"
 fitsio = "0.21.6"
@@ -12,6 +11,7 @@ ndarray = { version = "0.16.1", features = ["serde"] }
 ndarray-linalg = "0.17.0"
 ndarray-stats = "0.6.0"
 qhull = { git = "https://github.com/LucaCiucci/qhull-rs" }
+rand = "0.9.1"
 serde = { version = "1.0.217", features = ["derive"] }
 toml = "0.8.19"
 
