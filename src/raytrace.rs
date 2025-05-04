@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::f64::consts::PI;
 use std::rc::Rc;
 use std::vec;
 
@@ -9,8 +10,11 @@ use ndarray_linalg::SVD;
 use crate::collparts::MolData;
 use crate::config::Image;
 use crate::config::Parameters;
+use crate::config::RayTraceAlgorithm;
 use crate::constants as cc;
 use crate::defaults::N_DIMS;
+use crate::grid::delaunay;
+use crate::grid::Cell;
 use crate::grid::Grid;
 use crate::interface::gas_to_dust_ratio;
 use crate::lines::ContinuumLine;
@@ -154,15 +158,17 @@ impl FaceList {
     }
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct RayData {
     pub x: f64,
     pub y: f64,
     pub intensity: RVector,
     pub tau: RVector,
-    pub ppi: u64,
+    pub ppi: usize,
     pub is_inside_image: bool,
 }
 
+#[derive(Debug, Default)]
 pub struct BaryVelocityBuffer {
     pub num_vertices: usize,
     pub num_edges: usize,
@@ -172,7 +178,7 @@ pub struct BaryVelocityBuffer {
     pub entry_cell_bary: RVector,
     pub mid_cell_bary: RVector,
     pub exit_cell_bary: RVector,
-    pub shape_fns: Vec<RVector>,
+    pub shape_fns: RVector,
 }
 
 pub struct GridInterp {
@@ -211,14 +217,20 @@ fn extract_face(fi: usize, dc: &[Simplex], dci: usize, vertex_coords: RVector) -
     face
 }
 
-fn get_new_entry_face_index(new_cell: Simplex, dci: usize) -> Result<isize, RayThroughCellsError> {
+fn get_new_entry_face_index(new_cell: &Simplex, dci: usize) -> Result<isize, RayThroughCellsError> {
     let num_faces = N_DIMS + 1;
     new_cell
         .neigh
         .iter()
         .take(num_faces)
         .enumerate()
-        .find_map(|(i, neigh)| neigh.filter(|n| n.id == dci).map(|_| i as isize))
+        .find_map(|(i, &neigh_idx)| {
+            if neigh_idx == Some(dci) {
+                Some(i as isize)
+            } else {
+                None
+            }
+        })
         .ok_or(RayThroughCellsError::NotFound)
 }
 
@@ -487,6 +499,153 @@ fn trace_ray() {
     todo!()
 }
 
+fn do_barycentric_interpolation() {
+    todo!()
+}
+
+fn do_segment_interpolation() {
+    todo!()
+}
+
+fn calc_second_order_shape_functions() {
+    todo!()
+}
+
+fn do_barycentric_interpolation_vel() {
+    todo!()
+}
+
+fn do_barycentric_interpolations_vel() {
+    todo!()
+}
+
+fn do_segment_interpolation_vector() {
+    todo!()
+}
+
+fn do_segment_interpolation_scalar() {
+    todo!()
+}
+
+fn trace_ray_smooth() {
+    todo!()
+}
+
+fn locate_ray_on_image(
+    x: &[f64; 2],
+    size: f64,
+    img_centre_x_pxls: f64,
+    img_centre_y_pxls: f64,
+    img: &Image,
+) -> (bool, usize) {
+    let xi = (x[0] / size + img_centre_x_pxls).floor() as i64;
+    let yi = (x[1] / size + img_centre_y_pxls).floor() as i64;
+
+    if xi < 0 || xi >= img.pxls || yi < 0 || yi >= img.pxls {
+        (false, 0)
+    } else {
+        (true, (yi * img.pxls + xi) as usize)
+    }
+}
+
+fn assign_ray_on_image(
+    x: &[f64; 2],
+    size: f64,
+    img_centre_x_pxls: f64,
+    img_centre_y_pxls: f64,
+    max_num_rays_per_pixel: usize,
+    img: &mut Image,
+) -> Option<RayData> {
+    let (is_inside_image, ppi) =
+        locate_ray_on_image(x, size, img_centre_x_pxls, img_centre_y_pxls, img);
+
+    if !is_inside_image {
+        return Some(RayData {
+            is_inside_image: false,
+            ppi: 0,
+            x: x[0],
+            y: x[1],
+            intensity: RVector::zeros(img.nchan),
+            tau: RVector::zeros(img.nchan),
+        });
+    }
+    let pixel_data = &mut img.pixel[ppi];
+    if max_num_rays_per_pixel > 0 && pixel_data.num_rays >= max_num_rays_per_pixel {
+        return None;
+    }
+
+    pixel_data.num_rays += 1;
+
+    Some(RayData {
+        is_inside_image: true,
+        ppi,
+        x: x[0],
+        y: x[1],
+        intensity: RVector::zeros(img.nchan),
+        tau: RVector::zeros(img.nchan),
+    })
+}
+
+fn calc_triangular_barycentric_coords() {
+    todo!()
+}
+
+fn extract_grid_xs(num_points: usize, gp: &[Grid]) -> RVector {
+    let mut xvals = RVector::zeros(num_points * N_DIMS);
+    for iul in 0..num_points {
+        for ius in 0..N_DIMS {
+            xvals[iul * N_DIMS + ius] = gp[iul].x[ius];
+        }
+    }
+    xvals
+}
+
+fn convert_cell_to_simplex(cells: &[Cell], par: &Parameters, gp: &[Grid]) -> Vec<Simplex> {
+    let mut simplices = Vec::with_capacity(par.ncell);
+
+    // Step 1: Initialize all simplices with geometry and vertex data
+    for cell in cells.iter().take(par.ncell) {
+        let mut simplex = Simplex {
+            id: cell.id,
+            neigh: vec![None; N_DIMS + 1],
+            ..Default::default()
+        };
+
+        for vi in 0..N_DIMS + 1 {
+            simplex.vertex[vi] = cell.vertex[vi].as_ref().map(|grid| grid.id).unwrap_or(0) as usize;
+
+            let gi = simplex.vertex[vi];
+            for di in 0..N_DIMS {
+                simplex.centres[di] += gp[gi].x[di];
+            }
+        }
+
+        for di in 0..N_DIMS {
+            simplex.centres[di] *= 1.0 / (N_DIMS + 1) as f64;
+        }
+
+        simplices.push(simplex);
+    }
+
+    // Step 2: Assign neighbor indices
+    for (icell, cell) in cells.iter().enumerate().take(par.ncell) {
+        for vi in 0..N_DIMS + 1 {
+            if let Some(neigh_cell) = cell.neigh[vi].as_ref() {
+                let neigh_id = neigh_cell.id;
+                simplices[icell].neigh[vi] = Some(neigh_id);
+            } else {
+                simplices[icell].neigh[vi] = None;
+            }
+        }
+    }
+
+    simplices
+}
+
+fn get_2d_cells() {
+    todo!()
+}
+
 pub fn raytrace(
     img: &mut Image,
     par: &Parameters,
@@ -508,7 +667,7 @@ pub fn raytrace(
     let cutoff = par.min_scale * 1.0e-7;
 
     let pixel_size = img.distance * img.img_res;
-    let tot_n_img_pxls = img.pxls * img.pxls;
+    let tot_n_img_pxls = (img.pxls * img.pxls) as usize;
     let img_centre_x_pxls = img.pxls as f64 / 2.0;
     let img_centre_y_pxls = img.pxls as f64 / 2.0;
 
@@ -558,6 +717,131 @@ pub fn raytrace(
 
     let local_cmb = planck_fn(cmb_freq, cc::LOCAL_CMB_TEMP_SI);
     calc_grid_cont_dust_opacity(gp, par, cmb_freq, lam_kap)?;
+
+    for ppi in 0..tot_n_img_pxls {
+        for ichan in 0..img.nchan {
+            img.pixel[ppi].intense[ichan] = 0.0;
+            img.pixel[ppi].tau[ichan] = 0.0;
+        }
+    }
+
+    for ppi in 0..tot_n_img_pxls {
+        img.pixel[ppi].num_rays = 0;
+    }
+
+    let mut num_pts_in_annulus = 0;
+    for gpi in gp.iter().take(par.p_intensity) {
+        let rsqu = gpi.x[0] * gpi.x[0] + gpi.x[1] * gpi.x[1];
+        if rsqu > (4.0 / 9.0) * par.radius_squ {
+            num_pts_in_annulus += 1;
+        }
+    }
+    let num_circle_rays = if num_pts_in_annulus > 0 {
+        let circle_spacing =
+            (1.0 / 6.0) * par.radius * (5.0 * PI / num_pts_in_annulus as f64).sqrt();
+        (2.0 * PI * par.radius / circle_spacing) as usize
+    } else {
+        0
+    };
+
+    let mut xs = [0.0; 2];
+
+    let mut rays = Vec::with_capacity(par.p_intensity + num_circle_rays);
+
+    for gpi in gp.iter().take(par.p_intensity) {
+        for (i, xsi) in xs.iter_mut().enumerate() {
+            *xsi = (0..N_DIMS)
+                .map(|d| gpi.x[d] * img.rotation_matrix[[d, i]])
+                .sum();
+        }
+        if let Some(ray) = assign_ray_on_image(
+            &xs,
+            pixel_size,
+            img_centre_x_pxls,
+            img_centre_y_pxls,
+            MAX_NUM_RAYS_PER_PIXEL,
+            img,
+        ) {
+            rays.push(ray);
+        }
+    }
+
+    let num_active_rays_internal = rays.len();
+    if num_circle_rays > 0 {
+        let scale = 2.0 * PI / (num_circle_rays as f64);
+        for i in 0..num_circle_rays {
+            let angle = i as f64 * scale;
+            xs[0] = par.radius * angle.cos();
+            xs[1] = par.radius * angle.sin();
+            if let Some(ray) = assign_ray_on_image(
+                &xs,
+                pixel_size,
+                img_centre_x_pxls,
+                img_centre_y_pxls,
+                MAX_NUM_RAYS_PER_PIXEL,
+                img,
+            ) {
+                rays.push(ray);
+            }
+        }
+    }
+
+    let num_active_rays_minus_one_inv = 1.0 / (num_active_rays_internal - 1) as f64;
+
+    if par.ray_trace_algorithm == RayTraceAlgorithm::Modern {
+        match delaunay(gp, par.ncell, true, false) {
+            Ok(Some(mut cells)) => {
+                for (icell, cell) in cells.iter_mut().enumerate() {
+                    for di in 0..N_DIMS {
+                        let sum = (0..NUM_FACES)
+                            .map(|vi| {
+                                // Safely access the value inside the Option<Box<Grid>>
+                                cell.vertex[vi]
+                                    .as_ref()
+                                    .map(|grid| grid.x[di]) // Access the x field of Grid if Some(Box<Grid>)
+                                    .unwrap_or(0.0) // Provide a default value if None
+                            })
+                            .sum::<f64>();
+
+                        cell.centre[di] = sum * N_FACES_INV;
+                    }
+                    cell.id = icell;
+                }
+                let vertex_coords = extract_grid_xs(par.ncell, gp);
+                let simplices = convert_cell_to_simplex(cells.as_mut_slice(), par, gp);
+                if img.do_line && img.do_interpolate_vels {
+                    let mut vel_buffer = BaryVelocityBuffer::default();
+                    vel_buffer.num_vertices = N_DIMS + 1;
+                    vel_buffer.num_edges =
+                        vel_buffer.num_vertices * (vel_buffer.num_vertices - 1) / 2;
+                    vel_buffer.entry_cell_bary = RVector::zeros(vel_buffer.num_vertices);
+                    vel_buffer.mid_cell_bary = RVector::zeros(vel_buffer.num_vertices);
+                    vel_buffer.exit_cell_bary = RVector::zeros(vel_buffer.num_vertices);
+                    vel_buffer.vertex_velocities =
+                        vec![RVector::zeros(vel_buffer.num_vertices); N_DIMS];
+                    vel_buffer.edge_vertex_indices = vec![[0; 2]; vel_buffer.num_edges];
+                    vel_buffer.edge_velocities = vec![RVector::zeros(vel_buffer.num_edges); N_DIMS];
+                    vel_buffer.shape_fns =
+                        RVector::zeros(vel_buffer.num_vertices + vel_buffer.num_edges);
+                    let mut ei = 0;
+                    for i0 in 0..vel_buffer.num_vertices - 1 {
+                        for i1 in i0 + 1..vel_buffer.num_vertices {
+                            vel_buffer.edge_vertex_indices[ei][0] = i0;
+                            vel_buffer.edge_vertex_indices[ei][1] = i1;
+                            ei += 1;
+                        }
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("Error in delaunay: {:?}", e);
+                return Err(e);
+            }
+        }
+    }
+
+    // todo!();
 
     Ok(())
 }
