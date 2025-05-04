@@ -63,7 +63,7 @@ impl Grid {
 pub struct Cell {
     pub vertex: [Option<Box<Grid>>; N_DIMS + 1],
     pub neigh: [Option<Box<Cell>>; N_DIMS * 2],
-    pub id: u32,
+    pub id: usize,
     pub centre: [f64; N_DIMS],
 }
 
@@ -239,7 +239,7 @@ pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
     }
 
     // call Delaunay triangulation
-    delaunay(gp, par.ncell, false, true)?;
+    let _ = delaunay(gp, par.ncell, false, true)?;
 
     /* We just asked delaunay() to flag any grid points with IDs lower than
      * par->pIntensity (which means their distances from model centre are less
@@ -351,7 +351,12 @@ fn check_grid_densities(gp: &[Grid], par: &Parameters) {
 ///                 .id
 ///                 .neigh
 ///                 .vertx
-fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: bool) -> Result<()> {
+pub fn delaunay(
+    gp: &mut [Grid],
+    num_points: usize,
+    get_cells: bool,
+    check_sink: bool,
+) -> Result<Option<Vec<Cell>>> {
     // pt_array  contains the grid point locations in the format required by qhull.
     let pt_array: Vec<[f64; N_DIMS]> = gp.iter().map(|point| point.x).collect();
 
@@ -482,11 +487,11 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
     }
 
     if get_cells {
-        let mut dc: Vec<Cell> = Vec::with_capacity(num_cells as usize);
+        let mut cell: Vec<Cell> = Vec::with_capacity(num_cells as usize);
         let mut fi: usize = 0;
         for facet in qh.all_facets() {
             if !facet.upper_delaunay() {
-                dc[fi].id = facet.id();
+                cell[fi].id = facet.id() as usize;
                 fi += 1;
             }
         }
@@ -498,13 +503,13 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
                     .ok_or_else(|| anyhow!("Failed to get neighbors"))?;
                 for (i, neighbor) in neighbors.iter().enumerate() {
                     if neighbor.upper_delaunay() {
-                        dc[fi].neigh[i] = None;
+                        cell[fi].neigh[i] = None;
                     } else {
                         let mut ffi: usize = 0;
                         let mut neighbor_not_found = true;
                         while ffi < num_cells as usize && neighbor_not_found {
-                            if dc[ffi].id == neighbor.id() {
-                                dc[fi].neigh[i] = Some(Box::new(mem::take(&mut dc[ffi])));
+                            if cell[ffi].id == neighbor.id() as usize {
+                                cell[fi].neigh[i] = Some(Box::new(mem::take(&mut cell[ffi])));
                                 neighbor_not_found = false;
                             }
                             ffi += 1;
@@ -517,9 +522,10 @@ fn delaunay(gp: &mut [Grid], num_points: usize, get_cells: bool, check_sink: boo
                 fi += 1;
             }
         }
+        Ok(Some(cell))
+    } else {
+        Ok(None)
     }
-
-    Ok(())
 }
 
 /// The algorithm works its way up the list of points with one index and down with
