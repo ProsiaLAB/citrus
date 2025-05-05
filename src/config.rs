@@ -240,6 +240,13 @@ pub struct Config {
     pub images: HashMap<String, Image>,
 }
 
+impl Config {
+    fn from_str(toml_content: &str) -> Result<Config> {
+        let (parameters, images) = to_config(toml_content)?;
+        Ok(Config { parameters, images })
+    }
+}
+
 fn to_config(toml_content: &str) -> Result<(Parameters, HashMap<String, Image>)> {
     let config_value: toml::Value =
         toml::from_str(toml_content).context("Failed to parse TOML content")?; // Use context for parsing error
@@ -281,10 +288,7 @@ fn to_config(toml_content: &str) -> Result<(Parameters, HashMap<String, Image>)>
 
 pub fn load_config(path: &str) -> Result<Config> {
     let content = fs::read_to_string(path)?; // Propagate file read errors
-    let (parameters, images) = to_config(&content)?; // Propagate config parsing errors
-
-    // If both the file read and parsing succeeded, create and return the Config struct
-    Ok(Config { parameters, images })
+    Config::from_str(&content) // Propagate config parsing errors
 }
 
 /// Parse the configuration file
