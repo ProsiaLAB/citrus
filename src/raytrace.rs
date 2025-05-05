@@ -236,6 +236,12 @@ pub struct GridInterp {
     pub cont: ContinuumLine,
 }
 
+pub struct RayTracePreparation {
+    pub simplices: Vec<Simplex>,
+    pub vel_buffer: Option<BaryVelocityBuffer>,
+    pub vertex_coords: RVector,
+}
+
 /// Given a simplex dc and the face index (in the range {0...numDims}) fi,
 /// this returns the desired information about that face. Note that the ordering of
 /// the elements of face.r[] is the same as the ordering of the vertices of the
@@ -691,6 +697,46 @@ fn convert_cell_to_simplex(cells: &[Cell], par: &Parameters, gp: &[Grid]) -> Vec
 
 fn get_2d_cells() {
     todo!()
+}
+
+fn prepare_raytrace(
+    gp: &mut [Grid],
+    par: &Parameters,
+    img: &Image,
+) -> Result<Option<RayTracePreparation>> {
+    const NUM_FACES: usize = N_DIMS + 1;
+    const N_FACES_INV: f64 = 1.0 / (NUM_FACES as f64);
+    match par.ray_trace_algorithm {
+        RayTraceAlgorithm::Modern => match delaunay(gp, par.ncell, true, false)? {
+            DelaunayResult::Cells(mut cells) => {
+                for (icell, cell) in cells.iter_mut().enumerate() {
+                    for di in 0..N_DIMS {
+                        let sum: f64 = (0..NUM_FACES)
+                            .map(|vi| cell.vertex[vi].as_ref().map_or(0.0, |grid| grid.x[di]))
+                            .sum();
+                        cell.centre[di] = sum * N_FACES_INV;
+                    }
+                    cell.id = icell;
+                }
+
+                let vertex_coords = extract_grid_xs(par.ncell, gp);
+                let simplices = convert_cell_to_simplex(&cells, par, gp);
+                let vel_buffer = if img.do_line && img.do_interpolate_vels {
+                    Some(BaryVelocityBuffer::new())
+                } else {
+                    None
+                };
+
+                Ok(Some(RayTracePreparation {
+                    simplices,
+                    vel_buffer,
+                    vertex_coords,
+                }))
+            }
+            DelaunayResult::NoCells => Ok(None),
+        },
+        _ => Ok(None),
+    }
 }
 
 pub fn raytrace(
