@@ -200,6 +200,34 @@ pub struct BaryVelocityBuffer {
     pub shape_fns: RVector,
 }
 
+impl BaryVelocityBuffer {
+    fn new() -> Self {
+        let num_vertices = N_DIMS + 1;
+        let num_edges = num_vertices * (num_vertices - 1) / 2;
+        let mut vb = BaryVelocityBuffer {
+            num_vertices,
+            num_edges,
+            entry_cell_bary: RVector::zeros(num_vertices),
+            mid_cell_bary: RVector::zeros(num_vertices),
+            exit_cell_bary: RVector::zeros(num_vertices),
+            vertex_velocities: vec![RVector::zeros(num_vertices); N_DIMS],
+            edge_vertex_indices: vec![[0; 2]; num_edges],
+            edge_velocities: vec![RVector::zeros(num_edges); N_DIMS],
+            shape_fns: RVector::zeros(num_vertices + num_edges),
+        };
+        let mut ei = 0;
+        for i0 in 0..vb.num_vertices - 1 {
+            for i1 in i0 + 1..vb.num_vertices {
+                vb.edge_vertex_indices[ei][0] = i0;
+                vb.edge_vertex_indices[ei][1] = i1;
+                ei += 1;
+            }
+        }
+        vb
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct GridInterp {
     pub x: [f64; N_DIMS],
     pub magnetic_field: [f64; N_DIMS],
