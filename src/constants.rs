@@ -88,6 +88,14 @@ pub const SOLAR_RADIUS_CGS: f64 = SOLAR_RADIUS_SI * 100.0;
 /// A typical value for the ISM is 1000 particles/cm³
 pub const TYPICAL_ISM_DENS: f64 = 1000.0;
 
+/// Constant: HPLANCK * CLIGHT / (4.0 * PI * SPI)
+/// Value: 8.918502221e-27 (in appropriate units)
+pub const HPIP: f64 = 8.918_502_221e-27;
+
+/// Constant: 100.0 * HPLANCK * CLIGHT / KBOLTZ
+/// Value: 1.43877735 (in appropriate units)
+pub const HCKB: f64 = 1.438_777_35;
+
 /// Conversion factor: Arcseconds to radians
 /// 1 arcsec = π / 180 / 3600 radians
 pub const ARCSEC_TO_RAD: f64 = std::f64::consts::PI / 180.0 / 3600.0;
