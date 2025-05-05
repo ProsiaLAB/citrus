@@ -6,6 +6,9 @@ use std::vec;
 use anyhow::Result;
 use ndarray_linalg::Solve;
 use ndarray_linalg::SVD;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelRefMutIterator;
+use rayon::iter::ParallelIterator;
 
 use crate::collparts::MolData;
 use crate::config::RayTraceAlgorithm;
@@ -13,11 +16,18 @@ use crate::config::{Image, Parameters};
 use crate::constants as cc;
 use crate::defaults::N_DIMS;
 use crate::grid::delaunay;
+use crate::grid::DelaunayResult;
 use crate::grid::{Cell, Grid};
 use crate::interface::gas_to_dust_ratio;
+use crate::interface::velocity;
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
+use crate::source::source_fn_cont;
+use crate::source::source_fn_line;
+use crate::source::source_fn_polarized;
 use crate::types::{RMatrix, RVector, UVector};
+use crate::utils::calc_source_fn;
+use crate::utils::gauss_line;
 use crate::utils::{calc_dust_data, get_dtg, get_dust_temp, interpolate_kappa, planck_fn};
 
 // Define error types for the raytrace module
@@ -532,26 +542,278 @@ fn calc_grid_cont_dust_opacity(
     Ok(())
 }
 
-fn calc_line_amp_sample() {
-    todo!()
+/// The bulk velocity of the model material can vary significantly with position,
+/// thus so can the value of the line-shape function at a given frequency and
+/// direction. The present function calculates 'vfac', an approximate average of the
+/// line-shape function along a path of length ds in the direction of the line of
+/// sight.
+///
+/// # Note
+/// This is called from within the multi-threaded block.
+fn calc_line_amp_sample(
+    vfac: &mut f64,
+    projection_velocities: &RVector,
+    delta_v: f64,
+    binv: f64,
+    nsteps: usize,
+    nsteps_inv: f64,
+) -> f64 {
+    for i in 0..nsteps {
+        let v = delta_v - projection_velocities[i];
+        let val = v.abs() * binv;
+        if val <= 2500.0 {
+            *vfac += -(val * val).exp();
+        }
+    }
+    *vfac *= nsteps_inv;
+    *vfac
 }
 
+/// The bulk velocity of the model material can vary significantly with position,
+/// thus so can the value of the line-shape function at a given frequency and
+/// direction. The present function calculates 'vfac', an approximate average of the
+/// line-shape function along a path of length ds in the direction of the line of
+/// sight.
+///
+/// # Note
+/// This is called from within the multi-threaded block.
 fn calc_line_amp_interp() {
     todo!()
 }
 
+/// Approximates the average line-shape function along a path segment.
+///
+/// The bulk velocity of the model material can vary significantly with position,
+/// which affects the value of the line-shape function at a given frequency and
+/// direction. This function computes `vfac`, an approximate average of the
+/// line-shape function along a path of length `ds` in the direction of the
+/// line of sight.
+///
+/// # Note
+/// This function is invoked within a multi-threaded context.
 fn calc_line_amp_erf() {
     todo!()
 }
 
-fn line_plane_intersect() {
-    todo!()
+/// Computes the distance to the next Voronoi face in a given direction.
+///
+/// Returns `ds`, the (always positive) distance from the current position `x`
+/// to the next Voronoi face in the direction of vector `dx`, and `nposn`,
+/// the ID of the neighboring grid cell adjacent to that face.
+///
+/// # Note
+/// This function is invoked within a multi-threaded context.
+fn line_plane_intersect(
+    grid: &Grid,
+    x: &RVector,
+    dx: &RVector,
+    ds: f64,
+    cutoff: f64,
+) -> (f64, usize) {
+    for i in 0..grid.num_neigh {
+        let numerator = (grid.x[0] + grid.dir[i].x[0] / 2.0 - x[0]) * grid.dir[i].x[0]
+            + (grid.x[1] + grid.dir[i].x[1] / 2.0 - x[1]) * grid.dir[i].x[1]
+            + (grid.x[2] + grid.dir[i].x[2] / 2.0 - x[2]) * grid.dir[i].x[2];
+        let denominator =
+            dx[0] * grid.dir[i].x[0] + dx[1] * grid.dir[i].x[1] + dx[2] * grid.dir[i].x[2];
+        if denominator.abs() > 0.0 {
+            let newdist = numerator / denominator;
+            if newdist < ds && newdist > cutoff {
+                if let Some(neigh) = &grid.neigh[i] {
+                    return (newdist, neigh.id as usize);
+                }
+            }
+        }
+    }
+    (ds, 0)
 }
 
-fn trace_ray() {
-    todo!()
+/// Evaluates the light intensity along a line of sight for a given image pixel.
+///
+/// For a specified pixel position, this function computes the total light
+/// emitted or absorbed along the corresponding line of sight through the
+/// (potentially rotated) model. The computation is performed across multiple
+/// frequencies—one per channel in the output image.
+///
+/// The algorithm follows a similar approach to `calculateJBar()`, which determines
+/// the average radiant flux impinging on a grid cell. A notional photon is
+/// initiated at the model side nearest to the observer and propagated in the
+/// receding direction until it reaches the far side.
+///
+/// While this approach is conceptually non-physical, it simplifies the computation.
+///
+/// # Note
+/// This function is invoked within a multi-threaded context.
+fn trace_ray(
+    ray: &mut RayData,
+    gp: &[Grid],
+    img: &Image,
+    par: &Parameters,
+    mol_data: &[MolData],
+) -> Result<(), RayTraceError> {
+    const N_STEPS_THROUGH_CELL: usize = 10;
+    const N_STEPS_INV: f64 = 1.0 / (N_STEPS_THROUGH_CELL as f64);
+    let mut projection_velocities = RVector::zeros(N_STEPS_THROUGH_CELL);
+
+    let cutoff = par.min_scale * 1.0e-7;
+    let xp = ray.x;
+    let yp = ray.y;
+    if xp * xp + yp * yp > par.radius_squ {
+        return Ok(());
+    }
+
+    let mut x = RVector::zeros(N_DIMS);
+    let mut dx = RVector::zeros(N_DIMS);
+
+    let zp = -(par.radius_squ - (xp * xp + yp * yp)).sqrt();
+    for di in 0..N_DIMS {
+        x[di] = xp * img.rotation_matrix[[di, 0]]
+            + yp * img.rotation_matrix[[di, 1]]
+            + zp * img.rotation_matrix[[di, 2]];
+        dx[di] = img.rotation_matrix[[di, 2]];
+    }
+
+    let mut dist2 = (x[0] - gp[0].x[0]) * (x[0] - gp[0].x[0])
+        + (x[1] - gp[0].x[1]) * (x[1] - gp[0].x[1])
+        + (x[2] - gp[0].x[2]) * (x[2] - gp[0].x[2]);
+    let mut posn = 0;
+    for (i, gpi) in gp.iter().enumerate().take(par.ncell).skip(1) {
+        let ndist2 = (x[0] - gpi.x[0]) * (x[0] - gpi.x[0])
+            + (x[1] - gpi.x[1]) * (x[1] - gpi.x[1])
+            + (x[2] - gpi.x[2]) * (x[2] - gpi.x[2]);
+        if ndist2 < dist2 {
+            posn = i;
+            dist2 = ndist2;
+        }
+    }
+    let mut col = 0.0;
+    while col < 2.0 * zp.abs() {
+        let (ds, nposn) = line_plane_intersect(&gp[posn], &x, &dx, -2.0 * zp - col, cutoff);
+        if par.polarization {
+            let (snu_pol, alpha) =
+                source_fn_polarized(&gp[posn].mag_field, &gp[posn].cont, &img.rotation_matrix)?;
+            let dtau = alpha * ds;
+            let (mut remnant_snu, _) = calc_source_fn(dtau, par.taylor_cutoff);
+            remnant_snu *= ds;
+            for (stokesi, snu_poli) in snu_pol.iter().enumerate().take(img.nchan) {
+                let brightness_increment = (-ray.tau[stokesi]).exp() * remnant_snu * snu_poli;
+                ray.intensity[stokesi] += brightness_increment;
+                ray.tau[stokesi] += dtau;
+            }
+        } else if img.do_line && par.use_vel_func_in_raytrace {
+            for i in 0..N_STEPS_THROUGH_CELL {
+                let d = i as f64 * ds * N_STEPS_INV;
+                let vel = velocity(x[0] + (dx[0] * d), x[1] + (dx[1] * d), x[2] + (dx[2] * d));
+                projection_velocities[i] = dx.dot(&vel);
+            }
+            let mut cont_jnu = 0.0;
+            let mut cont_alpha = 0.0;
+            (cont_jnu, cont_alpha) = source_fn_cont(cont_jnu, cont_alpha, &gp[posn].cont);
+            for ichan in 0..img.nchan {
+                let mut jnu = cont_jnu;
+                let mut alpha = cont_alpha;
+                let v_this_chan = (ichan as f64 - (img.nchan - 1) as f64 * 0.5) * img.vel_res;
+                if img.do_line {
+                    for moli in 0..par.n_species {
+                        for linei in 0..mol_data[moli].nline {
+                            if mol_data[moli].freq[linei] > img.freq - img.bandwidth * 0.5
+                                && mol_data[moli].freq[linei] < img.freq + img.bandwidth * 0.5
+                            {
+                                let line_red_shift = if img.trans > -1 {
+                                    (mol_data[moli].freq[img.trans as usize]
+                                        - mol_data[moli].freq[linei])
+                                        / mol_data[moli].freq[img.trans as usize]
+                                        * cc::SPEED_OF_LIGHT_SI
+                                } else {
+                                    (img.freq - mol_data[moli].freq[linei])
+                                        / mol_data[moli].freq[linei]
+                                        * cc::SPEED_OF_LIGHT_SI
+                                };
+                                let delta_v = v_this_chan - img.source_velocity - line_red_shift;
+                                let binv = if let Some(mols) = &gp[posn].mol {
+                                    mols[moli].binv
+                                } else {
+                                    // This should never happen
+                                    return Err(RayTraceError::EmptyGrid);
+                                };
+                                let vfac = if par.use_vel_func_in_raytrace {
+                                    calc_line_amp_sample(
+                                        &mut 0f64,
+                                        &projection_velocities,
+                                        delta_v,
+                                        binv,
+                                        N_STEPS_THROUGH_CELL,
+                                        N_STEPS_INV,
+                                    )
+                                } else {
+                                    gauss_line(delta_v - dx.dot(&gp[posn].vel), binv)
+                                };
+                                if let Some(mols) = &gp[posn].mol {
+                                    (jnu, alpha) = source_fn_line(
+                                        &mols[moli],
+                                        &mol_data[moli],
+                                        vfac,
+                                        linei,
+                                        jnu,
+                                        alpha,
+                                    );
+                                } else {
+                                    return Err(RayTraceError::EmptyGrid);
+                                };
+                            }
+                        }
+                    }
+                }
+                let dtau = alpha * ds;
+                let (mut remnant_snu, _) = calc_source_fn(dtau, par.taylor_cutoff);
+                remnant_snu *= jnu * ds;
+                let brightness_increment = (-ray.tau[ichan]).exp() * remnant_snu;
+                ray.intensity[ichan] += brightness_increment;
+                ray.tau[ichan] += dtau;
+            }
+        }
+
+        for di in 0..N_DIMS {
+            x[di] += ds * dx[di];
+        }
+        col += ds;
+        posn = nposn;
+    }
+    Ok(())
 }
 
+/// Performs linear interpolation over a simplex (triangle) using barycentric coordinates.
+///
+/// This function takes:
+/// 1. `N` values `V_i` at the vertices of a simplex (triangle),
+/// 2. The barycentric coordinates of a point within the simplex,
+///    and returns the interpolated value at that point.
+///
+/// This approach is equivalent to using linear shape functions in Finite Element Analysis.
+/// The interpolation uses shape functions `Q_i`, where each shape function:
+/// - Is zero at all vertices except the `i`-th,
+/// - Has value one at the `i`-th vertex.
+///
+/// The interpolated value at point `r_` is computed as:
+///
+/// ```
+///           N
+///           ┌
+/// f(r_) =   │   V_i * Q_i(r_)
+///           └
+///          i=1
+/// ```
+///
+/// For linear interpolation, each shape function `Q_i(r_)` is equal to the `i`-th barycentric coordinate `B_i` of `r_`.
+///
+/// In this case, `N == 3`; the simplex is a triangular face of a Delaunay cell,
+/// and the interpolation point is the intersection of a ray with that face.
+/// This technique is used to interpolate several grid-based quantities.
+///
+/// For further reference, see the Wikipedia article on [Barycentric coordinates](https://en.wikipedia.org/wiki/Barycentric_coordinate_system).
+///
+/// # Note
+/// This is called from within the multi-threaded block.
 fn do_barycentric_interpolation() {
     todo!()
 }
@@ -580,7 +842,18 @@ fn do_segment_interpolation_scalar() {
     todo!()
 }
 
-fn trace_ray_smooth() {
+fn trace_ray_smooth(
+    ray: &mut RayData,
+    img: &Image,
+    par: &Parameters,
+    gp: &[Grid],
+    mol_data: &[MolData],
+    gips: Vec<GridInterp>,
+    rtp: &RayTracePreparation,
+) {
+    const NUM_SEGMENTS: usize = 5;
+    const N_SEGMENTS_INV: f64 = 1.0 / (NUM_SEGMENTS as f64);
+    const EPS: f64 = 1.0e-6;
     todo!()
 }
 
@@ -745,19 +1018,9 @@ pub fn raytrace(
     gp: &mut [Grid],
     mol_data: &[MolData],
     lam_kap: &Option<(RVector, RVector)>,
-) -> Result<()> {
+) -> Result<(), RayTraceError> {
     const MAX_NUM_RAYS_PER_PIXEL: usize = 20;
-    const NUM_FACES: usize = N_DIMS + 1;
     const NUM_INTERP_PTS: usize = 3;
-    const NUM_SEGMENTS: usize = 5;
-    const MIN_NUM_RAYS_FOR_AVERAGE: usize = 2;
-    const N_FACES_INV: f64 = 1.0 / (NUM_FACES as f64);
-    const N_SEGMENTS_INV: f64 = 1.0 / (NUM_SEGMENTS as f64);
-    const EPS: f64 = 1.0e-6;
-    const N_STEPS_THROUGH_CELL: usize = 10;
-    const N_STEPS_INV: f64 = 1.0 / (N_STEPS_THROUGH_CELL as f64);
-
-    let cutoff = par.min_scale * 1.0e-7;
 
     let pixel_size = img.distance * img.img_res;
     let tot_n_img_pxls = (img.pxls * img.pxls) as usize;
@@ -881,60 +1144,29 @@ pub fn raytrace(
 
     let num_active_rays_minus_one_inv = 1.0 / (num_active_rays_internal - 1) as f64;
 
-    if par.ray_trace_algorithm == RayTraceAlgorithm::Modern {
-        match delaunay(gp, par.ncell, true, false) {
-            Ok(Some(mut cells)) => {
-                for (icell, cell) in cells.iter_mut().enumerate() {
-                    for di in 0..N_DIMS {
-                        let sum = (0..NUM_FACES)
-                            .map(|vi| {
-                                // Safely access the value inside the Option<Box<Grid>>
-                                cell.vertex[vi]
-                                    .as_ref()
-                                    .map(|grid| grid.x[di]) // Access the x field of Grid if Some(Box<Grid>)
-                                    .unwrap_or(0.0) // Provide a default value if None
-                            })
-                            .sum::<f64>();
+    let rtp = prepare_raytrace(gp, par, img)?;
 
-                        cell.centre[di] = sum * N_FACES_INV;
-                    }
-                    cell.id = icell;
+    rays.par_iter_mut()
+        .take(num_active_rays_internal)
+        .try_for_each(|ray| {
+            // Thread-local variables
+            let mut gips = Vec::with_capacity(NUM_INTERP_PTS);
+            for _ in 0..NUM_INTERP_PTS {
+                gips.push(GridInterp::default());
+            }
+            match par.ray_trace_algorithm {
+                RayTraceAlgorithm::Legacy => {
+                    trace_ray(ray, gp, img, par, mol_data)?;
                 }
-                let vertex_coords = extract_grid_xs(par.ncell, gp);
-                let simplices = convert_cell_to_simplex(cells.as_mut_slice(), par, gp);
-                if img.do_line && img.do_interpolate_vels {
-                    let mut vel_buffer = BaryVelocityBuffer::default();
-                    vel_buffer.num_vertices = N_DIMS + 1;
-                    vel_buffer.num_edges =
-                        vel_buffer.num_vertices * (vel_buffer.num_vertices - 1) / 2;
-                    vel_buffer.entry_cell_bary = RVector::zeros(vel_buffer.num_vertices);
-                    vel_buffer.mid_cell_bary = RVector::zeros(vel_buffer.num_vertices);
-                    vel_buffer.exit_cell_bary = RVector::zeros(vel_buffer.num_vertices);
-                    vel_buffer.vertex_velocities =
-                        vec![RVector::zeros(vel_buffer.num_vertices); N_DIMS];
-                    vel_buffer.edge_vertex_indices = vec![[0; 2]; vel_buffer.num_edges];
-                    vel_buffer.edge_velocities = vec![RVector::zeros(vel_buffer.num_edges); N_DIMS];
-                    vel_buffer.shape_fns =
-                        RVector::zeros(vel_buffer.num_vertices + vel_buffer.num_edges);
-                    let mut ei = 0;
-                    for i0 in 0..vel_buffer.num_vertices - 1 {
-                        for i1 in i0 + 1..vel_buffer.num_vertices {
-                            vel_buffer.edge_vertex_indices[ei][0] = i0;
-                            vel_buffer.edge_vertex_indices[ei][1] = i1;
-                            ei += 1;
-                        }
-                    }
+                RayTraceAlgorithm::Modern => {
+                    let rtp = rtp
+                        .as_ref()
+                        .expect("RayTracePreparation missing for Modern algorithm");
+                    trace_ray_smooth(ray, img, par, gp, mol_data, gips, rtp);
                 }
             }
-            Ok(None) => {}
-            Err(e) => {
-                eprintln!("Error in delaunay: {:?}", e);
-                return Err(e);
-            }
-        }
-    }
-
-    // todo!();
+            Ok::<(), RayTraceError>(())
+        })?;
 
     Ok(())
 }
