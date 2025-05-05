@@ -15,7 +15,7 @@ pub fn density(x: f64, y: f64, z: f64) -> f64 {
     1.5e6 * (r_to_use / (300.0 * cc::AU_SI)).powf(-1.5) * 1e6
 }
 
-pub fn temperature(x: f64, y: f64, z: f64) -> f64 {
+fn temperature(x: f64, y: f64, z: f64) -> f64 {
     let mut x0: usize = 0;
 
     let temp = [

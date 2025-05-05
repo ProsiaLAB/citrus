@@ -7,10 +7,10 @@ use crate::types::RVector;
 pub const N_DIMS: usize = 3;
 
 pub const MAX_NUM_OF_SPECIES: usize = 100;
-pub const MAX_NUM_OF_IMAGES: usize = 100;
+const MAX_NUM_OF_IMAGES: usize = 100;
 pub const NUM_OF_GRID_STAGES: usize = 5;
 pub const MAX_NUM_OF_COLLISIONAL_PARTNERS: usize = 20;
-pub const TYPICAL_ISM_DENSITY: f64 = 1e3;
+const TYPICAL_ISM_DENSITY: f64 = 1e3;
 pub const MAX_NUM_HIGH: usize = 10; // ??? What this bro?
 
 pub const FIX_RANDOM_SEEDS: bool = false;
@@ -18,11 +18,11 @@ pub const FIX_RANDOM_SEEDS: bool = false;
 pub const NUM_RANDOM_DENS: usize = 100;
 
 pub const DENSITY_EXP: f64 = 0.2;
-pub const TREE_EXP: f64 = 2.0;
+const TREE_EXP: f64 = 2.0;
 
 pub const RAYS_PER_POINT: i64 = 200;
 
-pub const DEFAULT_ANGLE: f64 = -999.0;
+const DEFAULT_ANGLE: f64 = -999.0;
 
 pub fn collisional_partner_ids() -> Vec<usize> {
     vec![0; MAX_NUM_OF_COLLISIONAL_PARTNERS]

@@ -1,6 +1,10 @@
 use anyhow::bail;
 use anyhow::Result;
 
+use crate::collparts::MolData;
+use crate::constants as cc;
+use crate::lines::ContinuumLine;
+use crate::pops::Populations;
 use crate::types::{RMatrix, RVector};
 
 /// This function rotates the B-field vector from the model frame to the observer
@@ -45,7 +49,10 @@ use crate::types::{RMatrix, RVector};
 ///         Bp^T = B^T * rotation_matrix
 ///
 /// where ^T denotes transpose.
-pub fn stokes_angles(mag_field: &RVector, rotation_matrix: &RMatrix) -> Result<()> {
+///
+/// # Note
+/// This is called from within a multi-threaded block.
+fn stokes_angles(mag_field: &RVector, rotation_matrix: &RMatrix) -> Result<RVector> {
     let b_p = rotation_matrix.t().dot(mag_field);
     let mut trig_fncs = RVector::zeros(3);
 

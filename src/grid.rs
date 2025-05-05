@@ -50,7 +50,7 @@ pub struct Grid {
 }
 
 impl Grid {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Grid {
             t: [-1.0; 2],
             id: -1,
