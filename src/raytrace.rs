@@ -69,7 +69,7 @@ pub enum Orientation {
 }
 
 impl Intersect {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Intersect {
             fi: -1,
             ..Default::default()
@@ -99,7 +99,7 @@ pub struct FaceBasis {
 
 impl FaceBasis {
     /// Constructor for `FaceBasis`, initializes vectors dynamically based on [`N_DIMS`].
-    pub fn new() -> Self {
+    fn new() -> Self {
         let n_dims = N_DIMS;
         FaceBasis {
             axes: vec![RVector::zeros(n_dims); n_dims - 1],
@@ -109,7 +109,7 @@ impl FaceBasis {
     }
 
     /// Set a specific axis value.
-    pub fn set_axis(&mut self, axis_index: usize, component_index: usize, value: f64) {
+    fn set_axis(&mut self, axis_index: usize, component_index: usize, value: f64) {
         if axis_index < N_DIMS - 1 && component_index < N_DIMS {
             self.axes[axis_index][component_index] = value;
         } else {
@@ -118,7 +118,7 @@ impl FaceBasis {
     }
 
     /// Set a specific vertex value in `r`.
-    pub fn set_vertex(&mut self, vertex_index: usize, component_index: usize, value: f64) {
+    fn set_vertex(&mut self, vertex_index: usize, component_index: usize, value: f64) {
         if vertex_index < N_DIMS && component_index < N_DIMS - 1 {
             self.r[vertex_index][component_index] = value;
         } else {
@@ -127,7 +127,7 @@ impl FaceBasis {
     }
 
     /// Set the origin.
-    pub fn set_origin(&mut self, values: RVector) {
+    fn set_origin(&mut self, values: RVector) {
         if values.len() == N_DIMS {
             self.origin = values;
         } else {
@@ -146,7 +146,7 @@ pub struct FaceList {
 
 impl FaceList {
     /// Constructor for `FaceList`, initializes the struct with empty vectors.
-    pub fn new(num_faces: usize) -> Self {
+    fn new(num_faces: usize) -> Self {
         FaceList {
             faces: Vec::with_capacity(num_faces),
             face_ptrs: vec![None; N_DIMS + 1],
@@ -437,7 +437,7 @@ fn follow_ray_through_cells() {
     todo!()
 }
 
-pub fn calc_grid_cont_dust_opacity(
+fn calc_grid_cont_dust_opacity(
     gp: &mut [Grid],
     par: &Parameters,
     freq: f64,
