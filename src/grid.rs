@@ -106,7 +106,7 @@ pub struct Keyword {
 pub fn set_default_grid(num_points: usize, num_species: usize) -> Vec<Grid> {
     let mut gp = Vec::new();
     for _ in 0..num_points {
-        let mut g = Grid::default();
+        let mut g = Grid::new();
         if num_species > 0 {
             g.mol
                 .get_or_insert_with(Vec::new)

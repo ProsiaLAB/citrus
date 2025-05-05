@@ -108,7 +108,7 @@ pub fn grid_density(
 pub fn mol_data(n_species: usize) -> Option<Vec<MolData>> {
     let mut mol_data: Vec<MolData> = Vec::new();
     for _ in 0..n_species {
-        mol_data.push(MolData::default());
+        mol_data.push(MolData::new());
     }
     Some(mol_data)
 }
