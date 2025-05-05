@@ -12,6 +12,7 @@ ndarray-linalg = "0.17.0"
 ndarray-stats = "0.6.0"
 qhull = { git = "https://github.com/LucaCiucci/qhull-rs" }
 rand = "0.9.1"
+rayon = "1.10.0"
 serde = { version = "1.0.217", features = ["derive"] }
 toml = "0.8.19"
 
