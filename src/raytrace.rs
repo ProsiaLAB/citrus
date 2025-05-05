@@ -31,6 +31,29 @@ pub enum RayThroughCellsError {
     NotFound,
 }
 
+#[derive(Debug)]
+pub enum RayTraceError {
+    EmptyGrid,
+    Other(String),
+}
+
+impl From<anyhow::Error> for RayTraceError {
+    fn from(err: anyhow::Error) -> Self {
+        RayTraceError::Other(err.to_string())
+    }
+}
+
+impl std::fmt::Display for RayTraceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RayTraceError::EmptyGrid => write!(f, "Grid is empty"),
+            RayTraceError::Other(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+impl std::error::Error for RayTraceError {}
+
 /// NOTE: it is assumed that `vertex[i]` is opposite the face that abuts with
 /// * `neigh[i]` for all `i`.
 #[derive(Debug, Default)]
