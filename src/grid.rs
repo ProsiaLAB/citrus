@@ -103,6 +103,11 @@ pub struct Keyword {
     pub bool_value: bool,
 }
 
+pub enum DelaunayResult {
+    Cells(Vec<Cell>),
+    NoCells,
+}
+
 pub fn set_default_grid(num_points: usize, num_species: usize) -> Vec<Grid> {
     let mut gp = Vec::new();
     for _ in 0..num_points {
@@ -356,7 +361,7 @@ pub fn delaunay(
     num_points: usize,
     get_cells: bool,
     check_sink: bool,
-) -> Result<Option<Vec<Cell>>> {
+) -> Result<DelaunayResult> {
     // pt_array  contains the grid point locations in the format required by qhull.
     let pt_array: Vec<[f64; N_DIMS]> = gp.iter().map(|point| point.x).collect();
 
@@ -487,11 +492,11 @@ pub fn delaunay(
     }
 
     if get_cells {
-        let mut cell: Vec<Cell> = Vec::with_capacity(num_cells as usize);
+        let mut cells: Vec<Cell> = Vec::with_capacity(num_cells as usize);
         let mut fi: usize = 0;
         for facet in qh.all_facets() {
             if !facet.upper_delaunay() {
-                cell[fi].id = facet.id() as usize;
+                cells[fi].id = facet.id() as usize;
                 fi += 1;
             }
         }
@@ -503,13 +508,13 @@ pub fn delaunay(
                     .ok_or_else(|| anyhow!("Failed to get neighbors"))?;
                 for (i, neighbor) in neighbors.iter().enumerate() {
                     if neighbor.upper_delaunay() {
-                        cell[fi].neigh[i] = None;
+                        cells[fi].neigh[i] = None;
                     } else {
                         let mut ffi: usize = 0;
                         let mut neighbor_not_found = true;
                         while ffi < num_cells as usize && neighbor_not_found {
-                            if cell[ffi].id == neighbor.id() as usize {
-                                cell[fi].neigh[i] = Some(Box::new(mem::take(&mut cell[ffi])));
+                            if cells[ffi].id == neighbor.id() as usize {
+                                cells[fi].neigh[i] = Some(Box::new(mem::take(&mut cells[ffi])));
                                 neighbor_not_found = false;
                             }
                             ffi += 1;
@@ -522,9 +527,9 @@ pub fn delaunay(
                 fi += 1;
             }
         }
-        Ok(Some(cell))
+        Ok(DelaunayResult::Cells(cells))
     } else {
-        Ok(None)
+        Ok(DelaunayResult::NoCells)
     }
 }
 
