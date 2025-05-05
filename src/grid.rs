@@ -29,8 +29,8 @@ pub struct Point {
 pub struct Grid {
     pub id: i32,
     pub x: [f64; N_DIMS],
-    pub vel: [f64; N_DIMS],
-    pub mag_field: [f64; 3], // Magnetic field can only be 3D
+    pub vel: RVector,
+    pub mag_field: RVector, // Magnetic field can only be 3D
     pub v1: RVector,
     pub v2: RVector,
     pub v3: RVector,
@@ -185,7 +185,7 @@ pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
         gp[i].sink = false;
         gp[i].dir = Vec::new();
         gp[i].neigh = Vec::new();
-        gp[i].mag_field = [0.0; 3];
+        gp[i].mag_field = RVector::zeros(3);
 
         utils::progress_bar(i as f64 / par.p_intensity as f64, 50);
     }
@@ -222,7 +222,7 @@ pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
             gp[i].dens[0] = cc::CITRUS_EPS; // Assuming CITRUS_EPS is defined
             gp[i].t[0] = par.cmb_temp;
             gp[i].t[1] = par.cmb_temp;
-            gp[i].mag_field = [0.0; 3];
+            gp[i].mag_field = RVector::zeros(3);
             gp[i].dopb_turb = 0.0;
 
             // Initialize velocity array to 0.0

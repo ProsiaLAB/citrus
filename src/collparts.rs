@@ -4,7 +4,7 @@ use anyhow::Result;
 use crate::defaults;
 
 use crate::config::Parameters;
-use crate::types::{IVector, RVector};
+use crate::types::{RVector, UVector};
 
 #[derive(Debug, Default)]
 pub struct CollisionalPartnerData {
@@ -13,19 +13,19 @@ pub struct CollisionalPartnerData {
     pub collisional_partner_id: isize,
     pub ntemp: isize,
     pub ntrans: isize,
-    pub lcl: IVector,
-    pub lcu: IVector,
+    pub lcl: UVector,
+    pub lcu: UVector,
     pub density_index: isize,
     pub name: String,
 }
 
 #[derive(Debug, Default)]
 pub struct MolData {
-    pub nlev: isize,
-    pub nline: isize,
-    pub npart: isize,
-    pub lal: IVector,
-    pub lau: IVector,
+    pub nlev: usize,
+    pub nline: usize,
+    pub npart: usize,
+    pub lal: UVector,
+    pub lau: UVector,
     pub aeinst: RVector,
     pub freq: RVector,
     pub beinstu: RVector,
@@ -42,9 +42,6 @@ pub struct MolData {
 impl MolData {
     pub fn new() -> Self {
         MolData {
-            nlev: -1,
-            nline: -1,
-            npart: -1,
             amass: -1.0,
             ..Default::default()
         }
