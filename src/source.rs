@@ -71,5 +71,51 @@ fn stokes_angles(mag_field: &RVector, rotation_matrix: &RMatrix) -> Result<RVect
     //sin(2*phi) = 2*sin(phi)*cos(phi)
     trig_fncs[2] = 2.0 * b_p[0] * b_p[1] / b_xy_squared;
 
-    Ok(())
+    Ok(trig_fncs)
+}
+
+pub fn source_fn_line(
+    mol: &Populations,
+    mol_data: &MolData,
+    vfac: f64,
+    linei: usize,
+    jnu: f64,
+    alpha: f64,
+) -> (f64, f64) {
+    (
+        jnu + vfac * cc::HPIP * mol.spec_num_dens[mol_data.lau[linei]] * mol_data.aeinst[linei],
+        alpha
+            + vfac
+                * cc::HPIP
+                * (mol.spec_num_dens[mol_data.lal[linei]] * mol_data.beinstl[linei]
+                    - mol.spec_num_dens[mol_data.lau[linei]] * mol_data.beinstu[linei]),
+    )
+}
+
+pub fn source_fn_cont(jnu: f64, alpha: f64, cont: &ContinuumLine) -> (f64, f64) {
+    (jnu + cont.dust * cont.knu, alpha + cont.knu)
+}
+
+pub fn source_fn_polarized(
+    mag_field: &RVector,
+    cont: &ContinuumLine,
+    rotation_matrix: &RMatrix,
+) -> Result<([f64; 3], f64)> {
+    const MAX_POLARIZATION: f64 = 0.15;
+
+    let trig_funcs = stokes_angles(mag_field, rotation_matrix)?;
+
+    // Emission
+    // Continuum part:	j_nu = rho_dust * kappa_nu
+    let jnu = cont.dust * cont.knu;
+    let snu = [
+        jnu * (1.0 - MAX_POLARIZATION * (trig_funcs[0] - (2.0 / 3.0))),
+        jnu * MAX_POLARIZATION * trig_funcs[1] * trig_funcs[0],
+        jnu * MAX_POLARIZATION * trig_funcs[2] * trig_funcs[0],
+    ];
+
+    // Absorption
+    // Continuum part: Dust opacity
+    let alpha = cont.knu;
+    Ok((snu, alpha))
 }
