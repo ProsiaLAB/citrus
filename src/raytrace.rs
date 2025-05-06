@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::f64::consts::PI;
+use std::mem;
 use std::rc::Rc;
 use std::vec;
 
@@ -30,39 +31,69 @@ use crate::utils::calc_source_fn;
 use crate::utils::gauss_line;
 use crate::utils::{calc_dust_data, get_dtg, get_dust_temp, interpolate_kappa, planck_fn};
 
-// Define error types for the raytrace module
 #[derive(Debug)]
-pub enum RayThroughCellsError {
-    SVDFail,
-    NonSpan,
-    SolverFail,
-    TooManyEntry,
-    UnknownError,
-    NotFound,
+pub enum RTCResult {
+    NoEntryFaces {
+        entry: Intersect,
+    },
+    Success {
+        entry: Intersect,
+        chain_cell_ids: Vec<usize>,
+        exit_intersects: Vec<Intersect>,
+        len_chain_ptrs: usize,
+    },
+    FailedToBuildChain {
+        entry: Intersect,
+    },
 }
 
 #[derive(Debug)]
-pub enum RayTraceError {
+pub enum RTCError {
+    SVDFail,
+    NonSpan,
+    SolverFail,
+    TooManyEntries,
+    UnknownError,
+    MultipleCandidates,
+    NotFound,
     EmptyGrid,
     Other(String),
 }
 
-impl From<anyhow::Error> for RayTraceError {
+impl From<anyhow::Error> for RTCError {
     fn from(err: anyhow::Error) -> Self {
-        RayTraceError::Other(err.to_string())
+        RTCError::Other(err.to_string())
     }
 }
 
-impl std::fmt::Display for RayTraceError {
+impl std::fmt::Display for RTCError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RayTraceError::EmptyGrid => write!(f, "Grid is empty"),
-            RayTraceError::Other(msg) => write!(f, "{}", msg),
+            RTCError::SVDFail => write!(f, "SVD decomposition failed"),
+            RTCError::NonSpan => write!(f, "Non-spanning simplex"),
+            RTCError::SolverFail => write!(f, "Solver failed"),
+            RTCError::TooManyEntries => write!(f, "Too many entries"),
+            RTCError::UnknownError => write!(f, "Unknown error"),
+            RTCError::MultipleCandidates => write!(f, "Multiple candidates"),
+            RTCError::NotFound => write!(f, "Not found"),
+            RTCError::EmptyGrid => write!(f, "Grid is empty"),
+            RTCError::Other(msg) => write!(f, "{}", msg),
         }
     }
 }
 
-impl std::error::Error for RayTraceError {}
+impl std::error::Error for RTCError {}
+
+#[derive(Debug)]
+pub struct ChainContext {
+    cell_visited: Vec<bool>,
+    isimplex: usize,
+    entry_face_index: usize,
+    ncells_in_chain: usize,
+    len_chain_ptrs: usize,
+    chain_of_cell_ids: Vec<usize>,
+    cell_exit_intersects: Vec<Intersect>,
+}
 
 /// NOTE: it is assumed that `vertex[i]` is opposite the face that abuts with
 /// * `neigh[i]` for all `i`.
@@ -81,7 +112,7 @@ pub struct Simplex {
 pub struct Intersect {
     /// The index (in the range {0...N}) of the face (and thus of the opposite
     /// vertex, i.e. the one 'missing' from the bary[] list of this face).
-    pub fi: i32,
+    pub fi: usize,
     /// `> 0` means the ray exits, `< 0` means it enters, `== 0` means the
     /// face is parallel to the ray.
     pub orientation: Orientation,
@@ -93,21 +124,12 @@ pub struct Intersect {
     pub coll_par: f64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub enum Orientation {
     Exit,
     Entry,
     #[default]
     Parallel,
-}
-
-impl Intersect {
-    fn new() -> Self {
-        Intersect {
-            fi: -1,
-            ..Default::default()
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -246,7 +268,7 @@ pub struct GridInterp {
     pub cont: ContinuumLine,
 }
 
-pub struct RayTracePreparation {
+pub struct RTPreparation {
     pub simplices: Vec<Simplex>,
     pub vel_buffer: Option<BaryVelocityBuffer>,
     pub vertex_coords: RVector,
@@ -261,7 +283,7 @@ pub struct RayTracePreparation {
 /// spatial coordinates of the centre of the simplex, not of the face. This is
 /// designed to facilitate orientation of the face and thus to help determine
 /// whether rays which cross it are entering or exiting the simplex.
-fn extract_face(fi: usize, dc: &[Simplex], dci: usize, vertex_coords: RVector) -> Face {
+fn extract_face(fi: usize, dc: &[Simplex], dci: usize, vertex_coords: &RVector) -> Face {
     let num_faces = N_DIMS + 1;
     let mut face = Face::default();
     let mut vvi = 0;
@@ -280,7 +302,7 @@ fn extract_face(fi: usize, dc: &[Simplex], dci: usize, vertex_coords: RVector) -
     face
 }
 
-fn get_new_entry_face_index(new_cell: &Simplex, dci: usize) -> Result<isize, RayThroughCellsError> {
+fn get_new_entry_face_index(new_cell: &Simplex, dci: usize) -> Result<usize, RTCError> {
     let num_faces = N_DIMS + 1;
     new_cell
         .neigh
@@ -289,12 +311,12 @@ fn get_new_entry_face_index(new_cell: &Simplex, dci: usize) -> Result<isize, Ray
         .enumerate()
         .find_map(|(i, &neigh_idx)| {
             if neigh_idx == Some(dci) {
-                Some(i as isize)
+                Some(i)
             } else {
                 None
             }
         })
-        .ok_or(RayThroughCellsError::NotFound)
+        .ok_or(RTCError::NotFound)
 }
 
 fn calc_face_in_nminus(nvertices: usize, face: &Face) -> FaceBasis {
@@ -347,18 +369,18 @@ fn calc_face_in_nminus(nvertices: usize, face: &Face) -> FaceBasis {
 }
 
 fn intersect_line_with_face(
-    face: Face,
-    x: RVector,
-    dir: RVector,
+    face: &Face,
+    x: &RVector,
+    dir: &RVector,
     eps: f64,
-) -> Result<Intersect, RayThroughCellsError> {
+) -> Result<Intersect, RTCError> {
     let eps_inv = 1.0 / eps;
     let mut vs = RMatrix::zeros((N_DIMS - 1, N_DIMS));
     let mut norm = RVector::zeros(N_DIMS);
     let mut px_in_face = RVector::zeros(N_DIMS - 1);
     let mut t_mat = vec![RVector::zeros(N_DIMS - 1); N_DIMS - 1];
     let mut b_vec = RVector::zeros(N_DIMS - 1);
-    let mut intersect = Intersect::new();
+    let mut intersect = Intersect::default();
 
     for vi in 0..(N_DIMS - 1) {
         for di in 0..N_DIMS {
@@ -377,11 +399,9 @@ fn intersect_line_with_face(
         }
     } else {
         // Calculate norm via SVD
-        let svd_res = vs
-            .svd(false, true)
-            .map_err(|_| RayThroughCellsError::SVDFail)?;
+        let svd_res = vs.svd(false, true).map_err(|_| RTCError::SVDFail)?;
         let svs = svd_res.1;
-        let svv = svd_res.2.ok_or(RayThroughCellsError::SVDFail)?;
+        let svv = svd_res.2.ok_or(RTCError::SVDFail)?;
 
         let ci = 0;
         let mut ci_of_max = ci;
@@ -400,7 +420,7 @@ fn intersect_line_with_face(
             let singular_value = svs[ci];
             if singular_value * eps_inv < max_singular_value {
                 if ci_of_min >= 0 {
-                    return Err(RayThroughCellsError::NonSpan);
+                    return Err(RTCError::NonSpan);
                 }
                 ci_of_min = ci as isize;
             }
@@ -418,7 +438,7 @@ fn intersect_line_with_face(
         norm *= -1.0;
     }
 
-    let norm_dot_dx = (&norm * &dir).sum();
+    let norm_dot_dx = (&norm * dir).sum();
     intersect.orientation = match norm_dot_dx {
         x if x > 0.0 => Orientation::Exit,
         x if x < 0.0 => Orientation::Entry,
@@ -462,7 +482,7 @@ fn intersect_line_with_face(
             }
             b[i] = px_in_face[i] - face_plus_basis.r[0][i];
         }
-        let x = t.solve(&b).map_err(|_| RayThroughCellsError::SolverFail)?;
+        let x = t.solve(&b).map_err(|_| RTCError::SolverFail)?;
 
         for i in 0..N_DIMS - 1 {
             intersect.bary[i + 1] = x[i];
@@ -492,16 +512,184 @@ fn intersect_line_with_face(
     Ok(intersect)
 }
 
-fn build_ray_cell_chain(cell_visited: &mut [bool], dci: usize) {
+fn build_ray_cell_chain(
+    cntxt: &mut ChainContext,
+    x: &RVector,
+    dir: &RVector,
+    rtp: &RTPreparation,
+    simplices: &[Simplex],
+) -> Result<i32, RTCError> {
+    const EPS: f64 = 1.0e-6;
+    const NUM_FACES: usize = N_DIMS + 1;
+
+    let buffer_size = 1024;
+    let mut intersects = Vec::with_capacity(NUM_FACES);
+    let mut good_exit_fis = Vec::new();
+    let mut marginal_exit_fis = Vec::new();
+
     let mut following_single_chain = true;
-    // while !following_single_chain {
-    //     cell_visited[dci] = true;
-    //     todo!()
-    // }
+    while following_single_chain {
+        cntxt.cell_visited[cntxt.isimplex] = true;
+        if cntxt.ncells_in_chain >= cntxt.len_chain_ptrs {
+            cntxt.len_chain_ptrs += buffer_size;
+            cntxt.chain_of_cell_ids.resize(cntxt.len_chain_ptrs, 0);
+            cntxt
+                .cell_exit_intersects
+                .resize_with(cntxt.len_chain_ptrs, Intersect::default);
+        }
+        (cntxt.chain_of_cell_ids)[cntxt.ncells_in_chain] = cntxt.isimplex;
+        for fi in 0..NUM_FACES {
+            if fi != cntxt.entry_face_index
+                && (simplices[cntxt.isimplex].neigh[fi].is_none()
+                    || simplices[cntxt.isimplex].neigh[fi]
+                        .is_some_and(|n| !(cntxt.cell_visited)[n]))
+            {
+                let face = extract_face(
+                    fi,
+                    rtp.simplices.as_slice(),
+                    cntxt.isimplex,
+                    &rtp.vertex_coords,
+                );
+                let mut intersect = intersect_line_with_face(&face, x, dir, EPS)?;
+                intersect.fi = fi;
+                if intersect.orientation == Orientation::Exit {
+                    if intersect.coll_par - EPS > 0.0 {
+                        good_exit_fis.push(fi);
+                    } else if intersect.coll_par + EPS > 0.0 {
+                        marginal_exit_fis.push(fi);
+                    }
+                }
+                intersects.push(intersect);
+            }
+        }
+        if good_exit_fis.len() > 1 {
+            return Err(RTCError::MultipleCandidates);
+        } else if good_exit_fis.len() == 1 || marginal_exit_fis.len() == 1 {
+            let exit_fi = if good_exit_fis.len() == 1 {
+                good_exit_fis[0]
+            } else {
+                marginal_exit_fis[0]
+            };
+            (cntxt.cell_exit_intersects)[cntxt.ncells_in_chain] =
+                mem::take(&mut intersects[exit_fi]);
+            cntxt.ncells_in_chain += 1;
+            if simplices[cntxt.isimplex].neigh[exit_fi].is_none() {
+                cntxt.chain_of_cell_ids.resize(cntxt.ncells_in_chain, 0);
+                cntxt
+                    .cell_exit_intersects
+                    .resize_with(cntxt.ncells_in_chain, Intersect::default);
+                cntxt.len_chain_ptrs = cntxt.ncells_in_chain;
+                return Ok(0);
+            } else if let Some(neigh_idx) = simplices[cntxt.isimplex].neigh[exit_fi] {
+                cntxt.entry_face_index =
+                    get_new_entry_face_index(&simplices[neigh_idx], cntxt.isimplex)?;
+                cntxt.isimplex = neigh_idx;
+            } else {
+                return Err(RTCError::NotFound);
+            };
+        } else {
+            following_single_chain = false;
+        }
+    }
+
+    if marginal_exit_fis.is_empty() {
+        return Ok(3);
+    }
+
+    let mut i = 0;
+    let mut status = 4;
+    while i < marginal_exit_fis.len() && status > 0 {
+        let exit_fi = marginal_exit_fis[i];
+        (cntxt.cell_exit_intersects)[cntxt.ncells_in_chain] = mem::take(&mut intersects[exit_fi]);
+        if simplices[cntxt.isimplex].neigh[exit_fi].is_none() {
+            cntxt.chain_of_cell_ids.resize(cntxt.ncells_in_chain, 0);
+            cntxt
+                .cell_exit_intersects
+                .resize_with(cntxt.ncells_in_chain, Intersect::default);
+            cntxt.len_chain_ptrs = cntxt.ncells_in_chain;
+            return Ok(0);
+        } else if let Some(neigh_idx) = simplices[cntxt.isimplex].neigh[exit_fi] {
+            cntxt.entry_face_index =
+                get_new_entry_face_index(&simplices[neigh_idx], cntxt.isimplex)?;
+            cntxt.isimplex = neigh_idx;
+            status = build_ray_cell_chain(cntxt, x, dir, rtp, simplices)?;
+        } else {
+            return Err(RTCError::NotFound);
+        };
+
+        i += 1;
+    }
+
+    Ok(status)
 }
 
-fn follow_ray_through_cells() {
-    todo!()
+fn follow_ray_through_cells(
+    x: &RVector,
+    dir: &RVector,
+    rtp: &RTPreparation,
+) -> Result<RTCResult, RTCError> {
+    const NUM_FACES: usize = N_DIMS + 1;
+    const MAX_NUM_ENTRY_FACES: usize = 100;
+    const EPS: f64 = 1.0e-6;
+
+    let mut num_entry_faces = 0;
+    let mut entry_simplices = Vec::new();
+    let mut entry_fis = Vec::new();
+    let mut entry_intersects = Vec::new();
+
+    for (isimplex, simplex) in rtp.simplices.iter().enumerate() {
+        for fi in 0..NUM_FACES {
+            if simplex.neigh[fi].is_none() {
+                let face = extract_face(fi, rtp.simplices.as_slice(), isimplex, &rtp.vertex_coords);
+                let mut intersect = intersect_line_with_face(&face, x, dir, EPS)?;
+                intersect.fi = fi;
+                if intersect.orientation == Orientation::Entry && intersect.coll_par + EPS > 0.0 {
+                    if num_entry_faces > MAX_NUM_ENTRY_FACES {
+                        return Err(RTCError::TooManyEntries);
+                    }
+                    entry_simplices.push(isimplex);
+                    entry_fis.push(fi);
+                    entry_intersects.push(intersect);
+                    num_entry_faces += 1;
+                }
+            }
+        }
+    }
+
+    if num_entry_faces == 0 {
+        return Ok(RTCResult::NoEntryFaces {
+            entry: Intersect::default(),
+        });
+    }
+
+    let mut i = 0;
+    let mut status = 1;
+    let mut cntxt = ChainContext {
+        cell_visited: vec![false; rtp.simplices.len()],
+        isimplex: entry_simplices[i],
+        entry_face_index: entry_fis[i],
+        ncells_in_chain: 0,
+        len_chain_ptrs: 0,
+        chain_of_cell_ids: Vec::with_capacity(1024),
+        cell_exit_intersects: Vec::with_capacity(1024),
+    };
+    while i < num_entry_faces && status > 0 {
+        status = build_ray_cell_chain(&mut cntxt, x, dir, rtp, rtp.simplices.as_slice())?;
+        i += 1;
+    }
+
+    if status == 0 {
+        Ok(RTCResult::Success {
+            entry: mem::take(&mut entry_intersects[i - 1]),
+            chain_cell_ids: cntxt.chain_of_cell_ids,
+            exit_intersects: cntxt.cell_exit_intersects,
+            len_chain_ptrs: cntxt.len_chain_ptrs,
+        })
+    } else {
+        Ok(RTCResult::FailedToBuildChain {
+            entry: Intersect::default(),
+        })
+    }
 }
 
 fn calc_grid_cont_dust_opacity(
@@ -650,7 +838,7 @@ fn trace_ray(
     img: &Image,
     par: &Parameters,
     mol_data: &[MolData],
-) -> Result<(), RayTraceError> {
+) -> Result<(), RTCError> {
     const N_STEPS_THROUGH_CELL: usize = 10;
     const N_STEPS_INV: f64 = 1.0 / (N_STEPS_THROUGH_CELL as f64);
     let mut projection_velocities = RVector::zeros(N_STEPS_THROUGH_CELL);
@@ -734,7 +922,7 @@ fn trace_ray(
                                     mols[moli].binv
                                 } else {
                                     // This should never happen
-                                    return Err(RayTraceError::EmptyGrid);
+                                    return Err(RTCError::EmptyGrid);
                                 };
                                 let vfac = if par.use_vel_func_in_raytrace {
                                     calc_line_amp_sample(
@@ -758,7 +946,7 @@ fn trace_ray(
                                         alpha,
                                     );
                                 } else {
-                                    return Err(RayTraceError::EmptyGrid);
+                                    return Err(RTCError::EmptyGrid);
                                 };
                             }
                         }
@@ -842,6 +1030,35 @@ fn do_segment_interpolation_scalar() {
     todo!()
 }
 
+/// For a given image pixel position, this function evaluates the intensity of the
+/// total light emitted/absorbed along that line of sight through the (possibly
+/// rotated) model. The calculation is performed for several frequencies, one per
+/// channel of the output image.
+///
+/// Note that the algorithm employed here to solve the RTE is similar to that
+/// employed in the function calculateJBar() which calculates the average radiant
+/// flux impinging on a grid cell: namely the notional photon is started at the side
+/// of the model near the observer and 'propagated' in the receding direction until
+/// it 'reaches' the far side. This is rather non-physical in conception but it
+/// makes the calculation easier.
+///
+/// This version of traceray implements a new algorithm in which the population
+/// values are interpolated linearly from those at the vertices of the Delaunay cell
+/// which the working point falls within.
+///
+/// A note about the object 'gips': this is an array with 3 elements, each one a
+/// struct of type 'gridInterp'. This struct is meant to store as many of the
+/// grid-point quantities (interpolated from the appropriate values at actual grid
+/// locations) as are necessary for solving the radiative transfer equations along
+/// the ray path. The first 2 entries give the values for the entry and exit points
+/// to a Delaunay cell, but which is which can change, and is indicated via the
+/// variables entryI and exitI (this is a convenience to avoid copying the values,
+/// since the values for the exit point of one cell are obviously just those for
+/// entry point of the next). The third entry stores values interpolated along the
+/// ray path within a cell.
+///
+/// # Note
+/// This is called from within the multi-threaded block.
 fn trace_ray_smooth(
     ray: &mut RayData,
     img: &Image,
@@ -849,12 +1066,51 @@ fn trace_ray_smooth(
     gp: &[Grid],
     mol_data: &[MolData],
     gips: Vec<GridInterp>,
-    rtp: &RayTracePreparation,
-) {
+    rtp: &RTPreparation,
+) -> Result<(), RTCError> {
     const NUM_SEGMENTS: usize = 5;
     const N_SEGMENTS_INV: f64 = 1.0 / (NUM_SEGMENTS as f64);
     const EPS: f64 = 1.0e-6;
-    todo!()
+
+    const NUM_FACES: usize = N_DIMS + 1;
+    const N_VERT_PER_FACE: usize = 3;
+    const NUM_RAY_INTERP_SAMPLE: usize = 3;
+
+    for ichan in 0..img.nchan {
+        ray.tau[ichan] = 0.0;
+        ray.intensity[ichan] = 0.0;
+    }
+
+    let xp = ray.x;
+    let yp = ray.y;
+
+    if (xp * xp + yp * yp) > par.radius_squ {
+        return Ok(());
+    }
+
+    let mut x = RVector::zeros(N_DIMS);
+    let mut dir = RVector::zeros(N_DIMS);
+
+    let zp = -(par.radius_squ - (xp * xp + yp * yp)).sqrt();
+    for di in 0..N_DIMS {
+        x[di] = xp * img.rotation_matrix[[di, 0]]
+            + yp * img.rotation_matrix[[di, 1]]
+            + zp * img.rotation_matrix[[di, 2]];
+        dir[di] = img.rotation_matrix[[di, 2]];
+    }
+
+    let status = follow_ray_through_cells(&x, &dir, rtp)?;
+    let (entry, chain_cell_ids, exit_intersects, len_chain_ptrs) = match status {
+        RTCResult::Success {
+            entry,
+            chain_cell_ids,
+            exit_intersects,
+            len_chain_ptrs,
+        } => (entry, chain_cell_ids, exit_intersects, len_chain_ptrs),
+        _ => return Ok(()),
+    };
+
+    Ok(())
 }
 
 fn locate_ray_on_image(
@@ -930,9 +1186,9 @@ fn convert_cell_to_simplex(cells: &[Cell], par: &Parameters, gp: &[Grid]) -> Vec
     let mut simplices = Vec::with_capacity(par.ncell);
 
     // Step 1: Initialize all simplices with geometry and vertex data
-    for cell in cells.iter().take(par.ncell) {
+    for (icell, cell) in cells.iter().enumerate() {
         let mut simplex = Simplex {
-            id: cell.id,
+            id: icell,
             neigh: vec![None; N_DIMS + 1],
             ..Default::default()
         };
@@ -954,7 +1210,7 @@ fn convert_cell_to_simplex(cells: &[Cell], par: &Parameters, gp: &[Grid]) -> Vec
     }
 
     // Step 2: Assign neighbor indices
-    for (icell, cell) in cells.iter().enumerate().take(par.ncell) {
+    for (icell, cell) in cells.iter().enumerate() {
         for vi in 0..N_DIMS + 1 {
             if let Some(neigh_cell) = cell.neigh[vi].as_ref() {
                 let neigh_id = neigh_cell.id;
@@ -976,7 +1232,7 @@ fn prepare_raytrace(
     gp: &mut [Grid],
     par: &Parameters,
     img: &Image,
-) -> Result<Option<RayTracePreparation>> {
+) -> Result<Option<RTPreparation>> {
     const NUM_FACES: usize = N_DIMS + 1;
     const N_FACES_INV: f64 = 1.0 / (NUM_FACES as f64);
     match par.ray_trace_algorithm {
@@ -1000,7 +1256,7 @@ fn prepare_raytrace(
                     None
                 };
 
-                Ok(Some(RayTracePreparation {
+                Ok(Some(RTPreparation {
                     simplices,
                     vel_buffer,
                     vertex_coords,
@@ -1018,7 +1274,7 @@ pub fn raytrace(
     gp: &mut [Grid],
     mol_data: &[MolData],
     lam_kap: &Option<(RVector, RVector)>,
-) -> Result<(), RayTraceError> {
+) -> Result<(), RTCError> {
     const MAX_NUM_RAYS_PER_PIXEL: usize = 20;
     const NUM_INTERP_PTS: usize = 3;
 
@@ -1162,10 +1418,10 @@ pub fn raytrace(
                     let rtp = rtp
                         .as_ref()
                         .expect("RayTracePreparation missing for Modern algorithm");
-                    trace_ray_smooth(ray, img, par, gp, mol_data, gips, rtp);
+                    trace_ray_smooth(ray, img, par, gp, mol_data, gips, rtp)?;
                 }
             }
-            Ok::<(), RayTraceError>(())
+            Ok::<(), RTCError>(())
         })?;
 
     Ok(())
