@@ -5,11 +5,8 @@ use std::rc::Rc;
 use std::vec;
 
 use anyhow::Result;
-use ndarray_linalg::Solve;
-use ndarray_linalg::SVD;
-use rayon::iter::IndexedParallelIterator;
-use rayon::iter::IntoParallelRefMutIterator;
-use rayon::iter::ParallelIterator;
+use ndarray_linalg::{Solve, SVD};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::collparts::MolData;
 use crate::config::RayTraceAlgorithm;
@@ -19,17 +16,15 @@ use crate::defaults::N_DIMS;
 use crate::grid::delaunay;
 use crate::grid::DelaunayResult;
 use crate::grid::{Cell, Grid};
-use crate::interface::gas_to_dust_ratio;
-use crate::interface::velocity;
+use crate::interface::{gas_to_dust_ratio, velocity};
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
-use crate::source::source_fn_cont;
-use crate::source::source_fn_line;
-use crate::source::source_fn_polarized;
+use crate::source::{source_fn_cont, source_fn_line, source_fn_polarized};
 use crate::types::{RMatrix, RVector, UVector};
-use crate::utils::calc_source_fn;
-use crate::utils::gauss_line;
-use crate::utils::{calc_dust_data, get_dtg, get_dust_temp, interpolate_kappa, planck_fn};
+use crate::utils::{
+    calc_dust_data, calc_source_fn, gauss_line, get_dtg, get_dust_temp, interpolate_kappa,
+    planck_fn,
+};
 
 #[derive(Debug)]
 pub enum RTCResult {
