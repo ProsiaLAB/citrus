@@ -5,8 +5,6 @@ use std::num::ParseFloatError;
 
 use anyhow::Result;
 use anyhow::{anyhow, bail};
-use qhull::helpers::prepare_delaunay_points;
-use qhull::helpers::CollectedCoords;
 use qhull::QhBuilder;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -28,7 +26,7 @@ pub struct Point {
 #[derive(Default)]
 pub struct Grid {
     pub id: i32,
-    pub x: [f64; N_DIMS],
+    pub x: Vec<f64>,
     pub vel: RVector,
     pub mag_field: RVector, // Magnetic field can only be 3D
     pub v1: RVector,
@@ -362,19 +360,19 @@ pub fn delaunay(
     get_cells: bool,
     check_sink: bool,
 ) -> Result<DelaunayResult> {
-    // pt_array  contains the grid point locations in the format required by qhull.
-    let pt_array: Vec<[f64; N_DIMS]> = gp.iter().map(|point| point.x).collect();
+    // pt_array contains the grid point locations in the format required by qhull.
+    let mut pt_array = Vec::with_capacity(num_points * N_DIMS);
+    for gpi in gp.iter().take(num_points) {
+        for di in 0..N_DIMS {
+            pt_array.push(gpi.x[di]);
+        }
+    }
 
-    let CollectedCoords {
-        coords,
-        count: _,
-        dim,
-    } = prepare_delaunay_points(pt_array);
     let qh = QhBuilder::default()
         .delaunay(true)
         .scale_last(true)
         .triangulate(true)
-        .build_managed(dim, coords)
+        .build_managed(N_DIMS, pt_array)
         .map_err(|e| anyhow!("Failed to build Qhull: {:?}", e))?;
 
     let mut indices: Vec<usize> = Vec::new();
@@ -646,7 +644,13 @@ fn dist_calc(gp: &mut [Grid], num_points: usize) {
 /// Write the grid points to a VTK file
 /// The VTK file is written in the unstructured points format.
 fn write_vtk_unstructured_points(gp: &[Grid], par: &Parameters) -> Result<()> {
-    let pt_array: Vec<[f64; N_DIMS]> = gp.iter().map(|point| point.x).collect();
+    // pt_array contains the grid point locations in the format required by qhull.
+    let mut pt_array = Vec::with_capacity(par.ncell * N_DIMS);
+    for gpi in gp.iter().take(par.ncell) {
+        for di in 0..N_DIMS {
+            pt_array.push(gpi.x[di]);
+        }
+    }
 
     let mut file = File::create(&par.grid_file)?;
 
@@ -665,16 +669,11 @@ fn write_vtk_unstructured_points(gp: &[Grid], par: &Parameters) -> Result<()> {
         )?;
     }
 
-    let CollectedCoords {
-        coords,
-        count: _,
-        dim,
-    } = prepare_delaunay_points(pt_array);
     let qh = QhBuilder::default()
         .delaunay(true)
         .scale_last(true)
         .is_tracing(0)
-        .build_managed(dim, coords)
+        .build_managed(N_DIMS, pt_array)
         .map_err(|e| anyhow!("Failed to build Qhull: {:?}", e))?;
 
     let mut l: usize = 0;
