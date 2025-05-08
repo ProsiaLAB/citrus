@@ -6,8 +6,9 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.95"
 bitflags = "2.9.0"
+blas-src = { version = "0.11.1", features = ["accelerate"] }
 fitsio = "0.21.6"
-ndarray = { version = "0.16.1", features = ["serde"] }
+ndarray = { version = "0.16.1", features = ["rayon", "serde", "blas"] }
 ndarray-linalg = "0.17.0"
 qhull = { git = "https://github.com/LucaCiucci/qhull-rs" }
 rand = "0.9.1"
