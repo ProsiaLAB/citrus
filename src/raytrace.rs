@@ -1,8 +1,6 @@
 use std::array;
-use std::cell::RefCell;
 use std::f64::consts::PI;
 use std::mem;
-use std::rc::Rc;
 use std::vec;
 
 use anyhow::Result;
@@ -23,7 +21,7 @@ use crate::pops::Populations;
 use crate::source::{source_fn_cont, source_fn_line, source_fn_polarized};
 use crate::types::{RMatrix, RVector, UVector};
 use crate::utils::{
-    calc_dust_data, calc_source_fn, gauss_line, get_dtg, get_dust_temp, interpolate_kappa,
+    calc_dust_data, calc_source_fn, gauss_line, get_dtg, get_dust_temp, get_erf, interpolate_kappa,
     planck_fn,
 };
 
@@ -126,10 +124,10 @@ pub struct Intersect {
 
 #[derive(Debug, Default, PartialEq)]
 pub enum Orientation {
-    Exit,
-    Entry,
+    ExitFace,
+    EntryFace,
     #[default]
-    Parallel,
+    ParallelFace,
 }
 
 #[derive(Debug, Default)]
@@ -160,51 +158,6 @@ impl FaceBasis {
             axes: vec![RVector::zeros(n_dims); n_dims - 1],
             r: vec![RVector::zeros(n_dims - 1); n_dims],
             origin: RVector::zeros(n_dims),
-        }
-    }
-
-    /// Set a specific axis value.
-    fn set_axis(&mut self, axis_index: usize, component_index: usize, value: f64) {
-        if axis_index < N_DIMS - 1 && component_index < N_DIMS {
-            self.axes[axis_index][component_index] = value;
-        } else {
-            todo!()
-        }
-    }
-
-    /// Set a specific vertex value in `r`.
-    fn set_vertex(&mut self, vertex_index: usize, component_index: usize, value: f64) {
-        if vertex_index < N_DIMS && component_index < N_DIMS - 1 {
-            self.r[vertex_index][component_index] = value;
-        } else {
-            todo!()
-        }
-    }
-
-    /// Set the origin.
-    fn set_origin(&mut self, values: RVector) {
-        if values.len() == N_DIMS {
-            self.origin = values;
-        } else {
-            todo!()
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct FaceList {
-    /// A collection of faces.
-    pub faces: Vec<Rc<RefCell<Face>>>,
-    /// A collection of optional references to the faces, up to `N_DIMS + 1`.
-    pub face_ptrs: Vec<Option<Rc<RefCell<Face>>>>,
-}
-
-impl FaceList {
-    /// Constructor for `FaceList`, initializes the struct with empty vectors.
-    fn new(num_faces: usize) -> Self {
-        FaceList {
-            faces: Vec::with_capacity(num_faces),
-            face_ptrs: vec![None; N_DIMS + 1],
         }
     }
 }
@@ -262,7 +215,7 @@ impl BaryVelocityBuffer {
 #[derive(Debug, Default)]
 pub struct GridInterp {
     pub x: [f64; N_DIMS],
-    pub magnetic_field: [f64; N_DIMS],
+    pub magnetic_field: RVector,
     pub x_component_ray: f64,
     pub mol: Vec<Populations>,
     pub cont: ContinuumLine,
@@ -378,9 +331,8 @@ fn intersect_line_with_face(
     face: &Face,
     x: &RVector,
     dir: &RVector,
-    eps: f64,
 ) -> Result<Intersect, RTCError> {
-    let eps_inv = 1.0 / eps;
+    let eps_inv = 1.0 / cc::CITRUS_RT_EPS;
     let mut vs = RMatrix::zeros((N_DIMS - 1, N_DIMS));
     let mut norm = RVector::zeros(N_DIMS);
     let mut px_in_face = RVector::zeros(N_DIMS - 1);
@@ -446,8 +398,8 @@ fn intersect_line_with_face(
 
     let norm_dot_dx = (&norm * dir).sum();
     intersect.orientation = match norm_dot_dx {
-        x if x > 0.0 => Orientation::Exit,
-        x if x < 0.0 => Orientation::Entry,
+        x if x > 0.0 => Orientation::ExitFace,
+        x if x < 0.0 => Orientation::EntryFace,
         _ => return Ok(intersect),
     };
 
@@ -456,7 +408,7 @@ fn intersect_line_with_face(
         numerator += norm[di] * (face.r[0][di] - x[di]);
     }
     intersect.dist = numerator / norm_dot_dx;
-    let face_plus_basis = calc_face_in_nminus(N_DIMS, &face);
+    let face_plus_basis = calc_face_in_nminus(N_DIMS, face);
     for i in 0..N_DIMS - 1 {
         px_in_face[i] = 0.0;
         for di in 0..N_DIMS {
@@ -525,7 +477,6 @@ fn build_ray_cell_chain(
     rtp: &RTPreparation,
     simplices: &[Simplex],
 ) -> Result<i32, RTCError> {
-    const EPS: f64 = 1.0e-6;
     const NUM_FACES: usize = N_DIMS + 1;
 
     let buffer_size = 1024;
@@ -556,12 +507,12 @@ fn build_ray_cell_chain(
                     cntxt.isimplex,
                     &rtp.vertex_coords,
                 );
-                let mut intersect = intersect_line_with_face(&face, x, dir, EPS)?;
+                let mut intersect = intersect_line_with_face(&face, x, dir)?;
                 intersect.fi = fi;
-                if intersect.orientation == Orientation::Exit {
-                    if intersect.coll_par - EPS > 0.0 {
+                if intersect.orientation == Orientation::ExitFace {
+                    if intersect.coll_par - cc::CITRUS_RT_EPS > 0.0 {
                         good_exit_fis.push(fi);
-                    } else if intersect.coll_par + EPS > 0.0 {
+                    } else if intersect.coll_par + cc::CITRUS_RT_EPS > 0.0 {
                         marginal_exit_fis.push(fi);
                     }
                 }
@@ -636,7 +587,6 @@ fn follow_ray_through_cells(
 ) -> Result<RTCResult, RTCError> {
     const NUM_FACES: usize = N_DIMS + 1;
     const MAX_NUM_ENTRY_FACES: usize = 100;
-    const EPS: f64 = 1.0e-6;
 
     let mut num_entry_faces = 0;
     let mut entry_simplices = Vec::new();
@@ -647,9 +597,11 @@ fn follow_ray_through_cells(
         for fi in 0..NUM_FACES {
             if simplex.neigh[fi].is_none() {
                 let face = extract_face(fi, rtp.simplices.as_slice(), isimplex, &rtp.vertex_coords);
-                let mut intersect = intersect_line_with_face(&face, x, dir, EPS)?;
+                let mut intersect = intersect_line_with_face(&face, x, dir)?;
                 intersect.fi = fi;
-                if intersect.orientation == Orientation::Entry && intersect.coll_par + EPS > 0.0 {
+                if intersect.orientation == Orientation::EntryFace
+                    && intersect.coll_par + cc::CITRUS_RT_EPS > 0.0
+                {
                     if num_entry_faces > MAX_NUM_ENTRY_FACES {
                         return Err(RTCError::TooManyEntries);
                     }
@@ -771,8 +723,15 @@ fn calc_line_amp_sample(
 ///
 /// # Note
 /// This is called from within the multi-threaded block.
-fn calc_line_amp_interp() {
-    todo!()
+fn calc_line_amp_interp(binv: f64, delta_v: f64, projection_vel_ray: f64) -> f64 {
+    const THRESHOLD: f64 = 2500.0;
+    let v = delta_v - projection_vel_ray;
+    let val = v.abs() * binv;
+    if val <= THRESHOLD {
+        -(val * val).exp()
+    } else {
+        0.0
+    }
 }
 
 /// Approximates the average line-shape function along a path segment.
@@ -785,8 +744,21 @@ fn calc_line_amp_interp() {
 ///
 /// # Note
 /// This function is invoked within a multi-threaded context.
-fn calc_line_amp_erf() {
-    todo!()
+fn calc_line_amp_erf(
+    binv: f64,
+    delta_v: f64,
+    projection_vel_old: f64,
+    projection_vel_new: f64,
+) -> f64 {
+    const THRESHOLD: f64 = 1e-4;
+
+    let vb_old = binv * (delta_v - projection_vel_old);
+    let vb_new = binv * (delta_v - projection_vel_new);
+    if vb_new - vb_old > (2.0 * THRESHOLD) {
+        get_erf(vb_old, vb_new)
+    } else {
+        gauss_line((0.5) * (vb_new + vb_old), 1.0)
+    }
 }
 
 /// Computes the distance to the next Voronoi face in a given direction.
@@ -1026,7 +998,7 @@ fn do_barycentric_interpolation(
         let vals: RVector = gis.iter().map(|&i| gp[i].mag_field[di]).collect();
         gip.magnetic_field[di] = vals.dot(&intersect.bary);
     }
-    for moli in 0..par.n_species {
+    for (moli, mdi) in mol_data.iter().enumerate().take(par.n_species) {
         let binvals: RVector = gis
             .iter()
             .filter_map(|&i| {
@@ -1037,7 +1009,7 @@ fn do_barycentric_interpolation(
             })
             .collect();
         gip.mol[moli].binv = binvals.dot(&intersect.bary);
-        for leveli in 0..mol_data[moli].nlev {
+        for leveli in 0..mdi.nlev {
             let vals: RVector = gis
                 .iter()
                 .filter_map(|&i| {
@@ -1056,8 +1028,40 @@ fn do_barycentric_interpolation(
     gip.cont.knu = knuvals.dot(&intersect.bary);
 }
 
-fn do_segment_interpolation() {
-    todo!()
+fn do_segment_interpolation(
+    gips: &mut [GridInterp],
+    par: &Parameters,
+    mol_data: &[MolData],
+    ia: usize,
+    si: usize,
+    n_seg_inv: f64,
+) {
+    let frac_a = (si as f64 + 0.5) * n_seg_inv;
+    let frac_b = 1.0 - frac_a;
+    let ib = 1 - ia;
+
+    gips[2].x_component_ray = frac_a * gips[ib].x_component_ray + frac_b * gips[ia].x_component_ray;
+
+    for di in 0..N_DIMS {
+        gips[2].x[di] = frac_a * gips[ib].x[di] + frac_b * gips[ia].x[di];
+    }
+    for di in 0..3 {
+        gips[2].magnetic_field[di] =
+            frac_a * gips[ib].magnetic_field[di] + frac_b * gips[ia].magnetic_field[di];
+    }
+
+    for (moli, mdi) in mol_data.iter().enumerate().take(par.n_species) {
+        gips[2].mol[moli].binv =
+            frac_a * gips[ib].mol[moli].binv + frac_b * gips[ia].mol[moli].binv;
+        for leveli in 0..mdi.nlev {
+            gips[2].mol[moli].spec_num_dens[leveli] = frac_a
+                * gips[ib].mol[moli].spec_num_dens[leveli]
+                + frac_b * gips[ia].mol[moli].spec_num_dens[leveli];
+        }
+    }
+
+    gips[2].cont.dust = frac_a * gips[ib].cont.dust + frac_b * gips[ia].cont.dust;
+    gips[2].cont.knu = frac_a * gips[ib].cont.knu + frac_b * gips[ia].cont.knu;
 }
 
 fn calc_second_order_shape_functions(
@@ -1121,12 +1125,12 @@ fn do_barycentric_interpolations_vel<const N_DIMS: usize, const SAMPLES: usize>(
     Ok(())
 }
 
-fn do_segment_interpolation_vector() {
-    todo!()
-}
-
-fn do_segment_interpolation_scalar() {
-    todo!()
+fn do_segment_interpolation_scalar(ys: &RVector, x: f64) -> f64 {
+    let mut shape_fns = RVector::zeros(3);
+    shape_fns[0] = (x - 1.0) * (2.0 * x - 1.0);
+    shape_fns[1] = x * (2.0 * x - 1.0);
+    shape_fns[2] = 4.0 * x * (1.0 - x);
+    ys.dot(&shape_fns)
 }
 
 /// For a given image pixel position, this function evaluates the intensity of the
@@ -1169,7 +1173,6 @@ fn trace_ray_smooth(
 ) -> Result<(), RTCError> {
     const NUM_SEGMENTS: usize = 5;
     const N_SEGMENTS_INV: f64 = 1.0 / (NUM_SEGMENTS as f64);
-    const EPS: f64 = 1.0e-6;
 
     const NUM_FACES: usize = N_DIMS + 1;
     const N_VERT_PER_FACE: usize = 3;
@@ -1265,8 +1268,8 @@ fn trace_ray_smooth(
             (Vec::new(), None)
         };
 
-    let entry_index = 0;
-    let exit_index = 1;
+    let mut entry_index = 0;
+    let mut exit_index = 1;
     let dci = chain_cell_ids[0];
 
     let mut vvi = 0;
@@ -1302,7 +1305,7 @@ fn trace_ray_smooth(
     let mut ray_velocities: [RVector; NUM_RAY_INTERP_SAMPLE] =
         array::from_fn(|_| RVector::zeros(N_DIMS));
 
-    let mut projection_ray_velocities = [0.0; NUM_RAY_INTERP_SAMPLE];
+    let mut projection_ray_velocities = RVector::zeros(NUM_RAY_INTERP_SAMPLE);
 
     for ci in 0..len_chain_ptrs {
         let dci = chain_cell_ids[ci];
@@ -1332,6 +1335,11 @@ fn trace_ray_smooth(
             &exit_intersects[ci],
             RVector::from_vec(x_components_ray),
         );
+
+        let mut projection_vel_old = 0.0;
+        let mut projection_vel_offset = 0.0;
+        let mut projection_vel_new = 0.0;
+        let mut projection_vel_ray = 0.0;
 
         if img.do_line && img.do_interpolate_vels {
             if let Some(ref mut buffer) = vel_buffer {
@@ -1412,9 +1420,105 @@ fn trace_ray_smooth(
                 for i in 0..NUM_RAY_INTERP_SAMPLE {
                     projection_ray_velocities[i] = dir.dot(&ray_velocities[i]);
                 }
-                do_segment_interpolation_scalar();
+                projection_vel_old =
+                    do_segment_interpolation_scalar(&projection_ray_velocities, 0.0);
+                let projection_vel_second_deriv = (projection_ray_velocities[0]
+                    + projection_ray_velocities[1]
+                    - 2.0 * projection_ray_velocities[2])
+                    * 4.0;
+                projection_vel_offset =
+                    -projection_vel_second_deriv * N_SEGMENTS_INV * N_SEGMENTS_INV / 6.0;
             }
         }
+        let ds =
+            (gips[exit_index].x_component_ray - gips[entry_index].x_component_ray) * N_SEGMENTS_INV;
+        for si in 0..NUM_SEGMENTS {
+            do_segment_interpolation(gips, par, mol_data, entry_index, si, N_SEGMENTS_INV);
+            if par.polarization {
+                let (snu_pol, alpha) = source_fn_polarized(
+                    &gips[2].magnetic_field,
+                    &gips[2].cont,
+                    &img.rotation_matrix,
+                )?;
+                let dtau = alpha * ds;
+                let (mut remnant_snu, _) = calc_source_fn(dtau, par.taylor_cutoff);
+                remnant_snu *= ds;
+                for (stokesi, snu_poli) in snu_pol.iter().enumerate().take(img.nchan) {
+                    let brightness_increment = (-ray.tau[stokesi]).exp() * remnant_snu * snu_poli;
+                    ray.intensity[stokesi] += brightness_increment;
+                    ray.tau[stokesi] += dtau;
+                }
+            } else if img.do_line {
+                if img.do_interpolate_vels {
+                    projection_vel_new = do_segment_interpolation_scalar(
+                        &projection_ray_velocities,
+                        (si as f64 + 1.0) * (N_SEGMENTS_INV),
+                    );
+                } else {
+                    let vel = velocity(gips[2].x[0], gips[2].x[1], gips[2].x[2]);
+                    projection_vel_ray = dir.dot(&vel);
+                }
+            }
+            let cont_jnu = 0.0;
+            let cont_alpha = 0.0;
+            let (cont_jnu, cont_alpha) = source_fn_cont(cont_jnu, cont_alpha, &gips[2].cont);
+            for ichan in 0..img.nchan {
+                let ichanf = ichan as f64;
+                let nchanf = img.nchan as f64;
+                let mut jnu = cont_jnu;
+                let mut alpha = cont_alpha;
+                let v_this_channel = (ichanf - (nchanf - 1.0) * 0.5) * img.vel_res;
+                if img.do_line {
+                    for (moli, mdi) in mol_data.iter().enumerate().take(par.n_species) {
+                        for linei in 0..mdi.nline {
+                            if mdi.freq[linei] > img.freq - img.bandwidth * 0.5
+                                && mdi.freq[linei] < img.freq + img.bandwidth * 0.5
+                            {
+                                let line_red_shift = if img.trans > -1 {
+                                    (mdi.freq[img.trans as usize] - mdi.freq[linei])
+                                        / mdi.freq[img.trans as usize]
+                                        * cc::SPEED_OF_LIGHT_SI
+                                } else {
+                                    (img.freq - mdi.freq[linei]) / mdi.freq[linei]
+                                        * cc::SPEED_OF_LIGHT_SI
+                                };
+                                let delta_v = v_this_channel - img.source_velocity - line_red_shift;
+                                let vfac = if img.do_interpolate_vels {
+                                    calc_line_amp_erf(
+                                        projection_vel_old,
+                                        projection_vel_new,
+                                        gips[2].mol[moli].binv,
+                                        delta_v - projection_vel_offset,
+                                    )
+                                } else {
+                                    calc_line_amp_interp(
+                                        gips[2].mol[moli].binv,
+                                        delta_v,
+                                        projection_vel_ray,
+                                    )
+                                };
+                                (jnu, alpha) = source_fn_line(
+                                    &gips[2].mol[moli],
+                                    mdi,
+                                    vfac,
+                                    linei,
+                                    jnu,
+                                    alpha,
+                                );
+                            }
+                        }
+                    }
+                }
+                let dtau = alpha * ds;
+                let (mut remnant_snu, _) = calc_source_fn(dtau, par.taylor_cutoff);
+                remnant_snu *= jnu * ds;
+                let brightness_increment = (-ray.tau[ichan]).exp() * remnant_snu;
+                ray.intensity[ichan] += brightness_increment;
+                ray.tau[ichan] += dtau;
+            }
+        }
+        entry_index = exit_index;
+        exit_index = 1 - exit_index;
     }
 
     Ok(())
