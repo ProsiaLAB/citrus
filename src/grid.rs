@@ -222,7 +222,7 @@ pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
                 bail!("No molecular data found");
             }
 
-            gp[i].dens[0] = cc::CITRUS_EPS; // Assuming CITRUS_EPS is defined
+            gp[i].dens[0] = cc::CITRUS_GLOBAL_EPS; // Assuming CITRUS_EPS is defined
             gp[i].t[0] = par.cmb_temp;
             gp[i].t[1] = par.cmb_temp;
             gp[i].mag_field = RVector::zeros(3);
