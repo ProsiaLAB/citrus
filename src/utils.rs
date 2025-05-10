@@ -336,7 +336,7 @@ pub mod qrng {
 
     /// Halton State
     pub struct Halton {
-        index: u64,
+        index: usize,
         dimension: usize,
     }
 
@@ -378,7 +378,7 @@ pub mod qrng {
         }
     }
 
-    fn halton(mut index: u64, base: u64) -> f64 {
+    fn halton(mut index: usize, base: usize) -> f64 {
         let mut result = 0.0;
         let mut f = 1.0 / base as f64;
         while index > 0 {
@@ -389,7 +389,7 @@ pub mod qrng {
         result
     }
 
-    static PRIMES: &[u64; 1229] = &[
+    static PRIMES: &[usize; 1229] = &[
         2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89,
         97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181,
         191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281,
