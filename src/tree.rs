@@ -21,7 +21,7 @@ type MonitorFn = dyn Fn(
 pub struct TreeRandomConstantType {
     pub par: Parameters,
     pub random_gen_type: StdRng,
-    pub random_seed: u64,
+    pub random_seed: usize,
     pub quasi_random_gen_type: Halton,
     pub num_dims: i64,
     pub num_in_randoms: i64,
