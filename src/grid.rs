@@ -60,7 +60,9 @@ impl Grid {
 #[derive(Default)]
 pub struct Cell {
     pub vertex: [Option<Box<Grid>>; N_DIMS + 1],
-    pub neigh: [Option<Box<Cell>>; N_DIMS * 2],
+    // CHANGED: Use index (usize) instead of Box<Cell> for neighbor references.
+    // This resolves the borrow checking/lifetime/reallocation issues.
+    pub neigh: [Option<usize>; N_DIMS * 2],
     pub id: usize,
     pub centre: [f64; N_DIMS],
 }
@@ -73,8 +75,8 @@ pub struct Link {
 
 pub struct MoleculeInfo {
     pub mol_name: String,
-    pub n_levels: u64,
-    pub n_lines: u64,
+    pub n_levels: usize,
+    pub n_lines: usize,
 }
 
 pub struct GridInfo {
@@ -434,8 +436,8 @@ pub fn delaunay(
         }
     }
 
-    let mut point_ids_this_facet: [i32; N_DIMS + 1] = [0; N_DIMS + 1];
-    let mut num_cells: u64 = 0;
+    let mut point_ids_this_facet: [usize; N_DIMS + 1] = [0; N_DIMS + 1];
+    let mut num_cells: usize = 0;
     for facet in qh.all_facets() {
         if !facet.upper_delaunay() {
             let mut j: usize = 0;
@@ -446,7 +448,7 @@ pub fn delaunay(
                 let point_id_this = vertex.point_id(&qh);
                 match point_id_this {
                     Ok(point_id_this) => {
-                        point_ids_this_facet[j] = point_id_this;
+                        point_ids_this_facet[j] = point_id_this as usize;
                         j += 1;
                     }
                     Err(_) => {
@@ -459,10 +461,10 @@ pub fn delaunay(
                 for (j, &id_j) in point_ids_this_facet.iter().enumerate().take(N_DIMS + 1) {
                     if i != j {
                         let mut k: usize = 0;
-                        while gp[id_i as usize].neigh[k].is_some() {
-                            match gp[id_i as usize].neigh[k] {
+                        while gp[id_i].neigh[k].is_some() {
+                            match gp[id_i].neigh[k] {
                                 Some(ref neigh_grid) => {
-                                    let grid_id_j = gp[id_j as usize].id;
+                                    let grid_id_j = gp[id_j].id;
                                     if neigh_grid.id != grid_id_j {
                                         k += 1;
                                     } else {
@@ -490,7 +492,7 @@ pub fn delaunay(
     }
 
     if get_cells {
-        let mut cells: Vec<Cell> = Vec::with_capacity(num_cells as usize);
+        let mut cells: Vec<Cell> = Vec::with_capacity(num_cells);
         let mut fi: usize = 0;
         for facet in qh.all_facets() {
             if !facet.upper_delaunay() {
@@ -510,14 +512,14 @@ pub fn delaunay(
                     } else {
                         let mut ffi: usize = 0;
                         let mut neighbor_not_found = true;
-                        while ffi < num_cells as usize && neighbor_not_found {
+                        while ffi < num_cells && neighbor_not_found {
                             if cells[ffi].id == neighbor.id() as usize {
-                                cells[fi].neigh[i] = Some(Box::new(mem::take(&mut cells[ffi])));
+                                cells[fi].neigh[i] = Some(ffi);
                                 neighbor_not_found = false;
                             }
                             ffi += 1;
                         }
-                        if ffi >= num_cells as usize && neighbor_not_found {
+                        if ffi >= num_cells && neighbor_not_found {
                             bail!("Something went wrong with the Delaunay triangulation");
                         }
                     }
