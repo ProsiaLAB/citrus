@@ -4,7 +4,9 @@ use std::mem;
 use std::vec;
 
 use anyhow::Result;
+use anyhow::{anyhow, bail};
 use ndarray_linalg::{Solve, SVD};
+use qhull::QhBuilder;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::collparts::MolData;
@@ -581,11 +583,12 @@ fn build_ray_cell_chain(
 }
 
 fn follow_ray_through_cells(
+    ndims: usize,
     x: &RVector,
     dir: &RVector,
     rtp: &RTPreparation,
 ) -> Result<RTCResult, RTCError> {
-    const NUM_FACES: usize = N_DIMS + 1;
+    let num_faces = ndims + 1;
     const MAX_NUM_ENTRY_FACES: usize = 100;
 
     let mut num_entry_faces = 0;
@@ -594,7 +597,7 @@ fn follow_ray_through_cells(
     let mut entry_intersects = Vec::new();
 
     for (isimplex, simplex) in rtp.simplices.iter().enumerate() {
-        for fi in 0..NUM_FACES {
+        for fi in 0..num_faces {
             if simplex.neigh[fi].is_none() {
                 let face = extract_face(fi, rtp.simplices.as_slice(), isimplex, &rtp.vertex_coords);
                 let mut intersect = intersect_line_with_face(&face, x, dir)?;
@@ -1092,8 +1095,8 @@ fn calc_second_order_shape_functions(
 }
 
 fn do_barycentric_interpolation_vel<const N_DIMS: usize>(
-    buffer: &BaryVelocityBuffer,
     vels: &mut RVector,
+    buffer: &BaryVelocityBuffer,
 ) {
     vels.fill(0.0);
     let mut counter = 0;
@@ -1119,7 +1122,7 @@ fn do_barycentric_interpolations_vel<const N_DIMS: usize, const SAMPLES: usize>(
     for i in 0..3 {
         if do_ray[i] {
             calc_second_order_shape_functions(buffer, i)?;
-            do_barycentric_interpolation_vel::<N_DIMS>(buffer, &mut ray_velocities[i]);
+            do_barycentric_interpolation_vel::<N_DIMS>(&mut ray_velocities[i], buffer);
         }
     }
     Ok(())
@@ -1201,7 +1204,7 @@ fn trace_ray_smooth(
         dir[di] = img.rotation_matrix[[di, 2]];
     }
 
-    let status = follow_ray_through_cells(&x, &dir, rtp)?;
+    let status = follow_ray_through_cells(N_DIMS, &x, &dir, rtp)?;
     let (entry_intersect_first_cell, chain_cell_ids, exit_intersects, len_chain_ptrs) = match status
     {
         RTCResult::Success {
@@ -1542,12 +1545,12 @@ fn locate_ray_on_image(
 }
 
 fn assign_ray_on_image(
+    img: &mut Image,
     x: &[f64; 2],
     size: f64,
     img_centre_x_pxls: f64,
     img_centre_y_pxls: f64,
     max_num_rays_per_pixel: usize,
-    img: &mut Image,
 ) -> Option<RayData> {
     let (is_inside_image, ppi) =
         locate_ray_on_image(x, size, img_centre_x_pxls, img_centre_y_pxls, img);
@@ -1579,8 +1582,23 @@ fn assign_ray_on_image(
     })
 }
 
-fn calc_triangular_barycentric_coords() {
-    todo!()
+fn calc_triangular_barycentric_coords(vertices: &[[f64; 2]; 3], x: f64, y: f64) -> RVector {
+    let mat = [
+        [
+            vertices[0][0] - vertices[2][0],
+            vertices[1][0] - vertices[2][0],
+        ],
+        [
+            vertices[0][1] - vertices[2][1],
+            vertices[1][1] - vertices[2][1],
+        ],
+    ];
+    let vec = [x - vertices[2][0], y - vertices[2][1]];
+    let det = mat[0][0] * mat[1][1] - mat[0][1] * mat[1][0];
+    let b1 = (mat[1][1] * vec[0] - mat[0][1] * vec[1]) / det;
+    let b2 = (-mat[1][0] * vec[0] + mat[0][0] * vec[1]) / det;
+    let b3 = 1.0 - b1 - b2;
+    RVector::from_vec(vec![b1, b2, b3])
 }
 
 fn extract_grid_xs(num_points: usize, gp: &[Grid]) -> RVector {
@@ -1623,11 +1641,13 @@ fn convert_cell_to_simplex(cells: &[Cell], par: &Parameters, gp: &[Grid]) -> Vec
     // Step 2: Assign neighbor indices
     for (icell, cell) in cells.iter().enumerate() {
         for vi in 0..N_DIMS + 1 {
-            if let Some(neigh_cell) = cell.neigh[vi].as_ref() {
-                let neigh_id = neigh_cell.id;
-                simplices[icell].neigh[vi] = Some(neigh_id);
-            } else {
-                simplices[icell].neigh[vi] = None;
+            match cell.neigh[vi] {
+                Some(neighbor_cell_index) => {
+                    simplices[icell].neigh[vi] = Some(neighbor_cell_index);
+                }
+                None => {
+                    simplices[icell].neigh[vi] = None;
+                }
             }
         }
     }
@@ -1635,8 +1655,99 @@ fn convert_cell_to_simplex(cells: &[Cell], par: &Parameters, gp: &[Grid]) -> Vec
     simplices
 }
 
-fn get_2d_cells() {
-    todo!()
+fn get_2d_cells(rays: &[RayData], num_active_rays: usize) -> Result<Vec<Simplex>> {
+    const N_DIMS_2D: usize = 2;
+    const N_FACES_2D: usize = N_DIMS_2D + 1;
+    const N_FACES_2D_INV: f64 = 1.0 / (N_FACES_2D as f64);
+
+    let mut pt_array = Vec::with_capacity(N_DIMS_2D * num_active_rays);
+    for ray in rays.iter().take(num_active_rays) {
+        pt_array.push(ray.x);
+        pt_array.push(ray.y);
+    }
+
+    let pt_array_clone = pt_array.clone();
+
+    let qh = QhBuilder::default()
+        .delaunay(true)
+        .scale_last(true)
+        .triangulate(true)
+        .build_managed(N_DIMS, pt_array)
+        .map_err(|e| anyhow!("Failed to build Qhull: {:?}", e))?;
+
+    let mut num_cells: usize = 0;
+    for facet in qh.all_facets() {
+        if !facet.upper_delaunay() {
+            num_cells += 1;
+        }
+    }
+
+    let mut simplices_2d: Vec<Simplex> = Vec::with_capacity(num_cells);
+
+    let mut fi = 0;
+    for facet in qh.all_facets() {
+        if !facet.upper_delaunay() {
+            simplices_2d[fi].id = facet.id() as usize;
+            fi += 1;
+        }
+    }
+
+    let mut fi = 0;
+    for facet in qh.all_facets() {
+        if !facet.upper_delaunay() {
+            let neighbors = facet
+                .neighbors()
+                .ok_or_else(|| anyhow!("Failed to get neighbors"))?;
+            for (i, neighbor) in neighbors.iter().enumerate() {
+                if neighbor.upper_delaunay() {
+                    simplices_2d[fi].neigh[i] = None;
+                } else {
+                    let mut ffi = 0;
+                    let mut neighbor_not_found = true;
+                    while ffi < num_cells && neighbor_not_found {
+                        if simplices_2d[ffi].id == neighbor.id() as usize {
+                            simplices_2d[fi].neigh[i] = Some(ffi);
+                            neighbor_not_found = false;
+                        }
+                        ffi += 1;
+                    }
+                    if ffi >= num_cells && neighbor_not_found {
+                        bail!("Something went wrong with the Delaunay triangulation");
+                    }
+                }
+            }
+            let mut i = 0;
+            let vertices = facet
+                .vertices()
+                .ok_or_else(|| anyhow!("Failed to get vertices"))?;
+            for vertex in vertices.iter() {
+                let point_id_this = vertex.point_id(&qh);
+                match point_id_this {
+                    Ok(point_id_this) => {
+                        simplices_2d[fi].vertex[i] = point_id_this as usize;
+                        i += 1;
+                    }
+                    Err(_) => {
+                        bail!("Failed to get point ID");
+                    }
+                }
+            }
+            fi += 1;
+        }
+    }
+
+    for (isimplex_2d, simplex_2d) in simplices_2d.iter_mut().enumerate().take(num_cells) {
+        for di in 0..N_DIMS_2D {
+            let mut sum = 0.0;
+            for vi in 0..N_FACES_2D {
+                let id = simplex_2d.vertex[vi];
+                sum += pt_array_clone[id * N_DIMS + di];
+            }
+            simplex_2d.centres[di] = sum / N_FACES_2D_INV;
+        }
+        simplex_2d.id = isimplex_2d;
+    }
+    Ok(simplices_2d)
 }
 
 fn prepare_raytrace(gp: &mut [Grid], par: &Parameters) -> Result<Option<RTPreparation>> {
@@ -1671,13 +1782,14 @@ fn prepare_raytrace(gp: &mut [Grid], par: &Parameters) -> Result<Option<RTPrepar
 
 pub fn raytrace(
     img: &mut Image,
-    par: &Parameters,
     gp: &mut [Grid],
+    par: &Parameters,
     mol_data: &[MolData],
     lam_kap: &Option<(RVector, RVector)>,
 ) -> Result<(), RTCError> {
     const MAX_NUM_RAYS_PER_PIXEL: usize = 20;
     const NUM_INTERP_PTS: usize = 3;
+    const MIN_NUM_RAYS_FOR_AVERAGE: usize = 2;
 
     let pixel_size = img.distance * img.img_res;
     let tot_n_img_pxls = (img.pxls * img.pxls) as usize;
@@ -1697,7 +1809,7 @@ pub fn raytrace(
         }
     }
 
-    let (cmb_freq, cmb_mol_i, cmb_line_i): (f64, Option<usize>, Option<i64>) = if img.do_line {
+    let cmb_freq = if img.do_line {
         let (cmb_mol_i, cmb_line_i) = if img.trans >= 0 {
             (img.mol_i, img.trans)
         } else {
@@ -1709,7 +1821,7 @@ pub fn raytrace(
                     if mol_i == 0 && line_i == 0 {
                         continue;
                     }
-                    let abs_delta_freq = img.freq - mol_data_i.freq[line_i as usize];
+                    let abs_delta_freq = img.freq - mol_data_i.freq[line_i];
                     if abs_delta_freq < min_freq {
                         min_freq = abs_delta_freq.abs();
                         cmb_mol_i = mol_i;
@@ -1719,13 +1831,9 @@ pub fn raytrace(
             }
             (cmb_mol_i, cmb_line_i)
         };
-        (
-            mol_data[cmb_mol_i].freq[cmb_line_i as usize],
-            Some(cmb_mol_i),
-            Some(cmb_line_i),
-        )
+        mol_data[cmb_mol_i].freq[cmb_line_i as usize]
     } else {
-        (img.freq, None, None)
+        img.freq
     };
 
     let local_cmb = planck_fn(cmb_freq, cc::LOCAL_CMB_TEMP_SI);
@@ -1768,12 +1876,12 @@ pub fn raytrace(
                 .sum();
         }
         if let Some(ray) = assign_ray_on_image(
+            img,
             &xs,
             pixel_size,
             img_centre_x_pxls,
             img_centre_y_pxls,
             MAX_NUM_RAYS_PER_PIXEL,
-            img,
         ) {
             rays.push(ray);
         }
@@ -1787,21 +1895,22 @@ pub fn raytrace(
             xs[0] = par.radius * angle.cos();
             xs[1] = par.radius * angle.sin();
             if let Some(ray) = assign_ray_on_image(
+                img,
                 &xs,
                 pixel_size,
                 img_centre_x_pxls,
                 img_centre_y_pxls,
                 MAX_NUM_RAYS_PER_PIXEL,
-                img,
             ) {
                 rays.push(ray);
             }
         }
     }
 
-    let num_active_rays_minus_one_inv = 1.0 / (num_active_rays_internal - 1) as f64;
-
-    let rtp = prepare_raytrace(gp, par)?;
+    let mut rtp_opt = prepare_raytrace(gp, par)?;
+    let rtp = rtp_opt
+        .as_mut()
+        .expect("RTPreparation missing for Modern algorithm");
 
     rays.par_iter_mut()
         .take(num_active_rays_internal)
@@ -1816,14 +1925,138 @@ pub fn raytrace(
                     trace_ray(ray, gp, img, par, mol_data)?;
                 }
                 RayTraceAlgorithm::Modern => {
-                    let rtp = rtp
-                        .as_ref()
-                        .expect("RayTracePreparation missing for Modern algorithm");
                     trace_ray_smooth(ray, &mut gips, gp, img, par, mol_data, rtp)?;
                 }
             }
             Ok::<(), RTCError>(())
         })?;
+
+    for ray in rays.iter_mut().skip(num_active_rays_internal) {
+        for ichan in 0..img.nchan {
+            ray.intensity[ichan] = 0.0;
+            ray.tau[ichan] = 0.0;
+        }
+    }
+
+    for ray in &mut rays {
+        if ray.is_inside_image && img.pixel[ray.ppi].num_rays >= MIN_NUM_RAYS_FOR_AVERAGE {
+            for ichan in 0..img.nchan {
+                img.pixel[ray.ppi].intense[ichan] += ray.intensity[ichan];
+                img.pixel[ray.ppi].tau[ichan] += ray.tau[ichan];
+            }
+        }
+    }
+
+    let mut num_pixels_for_interp = 0;
+    for ppi in 0..tot_n_img_pxls {
+        if img.pixel[ppi].num_rays >= MIN_NUM_RAYS_FOR_AVERAGE {
+            let nrays_inv = 1.0 / (img.pixel[ppi].num_rays as f64);
+            for ichan in 0..img.nchan {
+                img.pixel[ppi].intense[ichan] *= nrays_inv;
+                img.pixel[ppi].tau[ichan] *= nrays_inv;
+            }
+        } else {
+            num_pixels_for_interp += 1;
+        }
+    }
+
+    let mut raster_starts = RVector::zeros(2);
+    let raster_dirs = RVector::from_vec(vec![0.0, 1.0]);
+    let mut gis = UVector::zeros(3);
+    let mut triangle = [[0.0; 2]; 3];
+
+    if num_pixels_for_interp > 0 {
+        let mut raster_cell_ids = UVector::zeros(img.pxls as usize);
+        let mut raster_pixel_is_in_cells: Vec<bool> = Vec::with_capacity(img.pxls as usize);
+        let mut grid_2d_coords = RVector::zeros(2 * rays.len());
+        for (ri, _) in rays.iter().enumerate() {
+            grid_2d_coords[ri * 2] = rays[ri].x;
+            grid_2d_coords[ri * 2 + 1] = rays[ri].y;
+        }
+        let simplices_2d = get_2d_cells(rays.as_slice(), rays.len())?;
+        raster_starts[1] = pixel_size * (0.5 - img_centre_y_pxls);
+        let rtp = RTPreparation {
+            simplices: simplices_2d,
+            vertex_coords: grid_2d_coords,
+        };
+        for xi in 0..img.pxls {
+            let x = pixel_size * (0.5 + xi as f64 - img_centre_x_pxls);
+            raster_starts[0] = x;
+            for yi in 0..img.pxls {
+                raster_pixel_is_in_cells[yi as usize] = false;
+                raster_cell_ids[yi as usize] = 0;
+            }
+            let status = follow_ray_through_cells(2, &raster_starts, &raster_dirs, &rtp)?;
+            let (entry_intersect_first_cell, chain_cell_ids, exit_intersects, len_chain_ptrs) =
+                match status {
+                    RTCResult::Success {
+                        entry_intersect_first_cell,
+                        chain_cell_ids,
+                        exit_intersects,
+                        len_chain_ptrs,
+                    } => (
+                        entry_intersect_first_cell,
+                        chain_cell_ids,
+                        exit_intersects,
+                        len_chain_ptrs,
+                    ),
+                    _ => {
+                        continue;
+                    }
+                };
+            let mut start_yi = img.pxls; // default
+            for yi in 0..img.pxls {
+                let delta_y = pixel_size * yi as f64;
+                if delta_y >= entry_intersect_first_cell.dist {
+                    start_yi = yi;
+                    break;
+                }
+            }
+            let mut si = 0;
+            for yi in start_yi..img.pxls {
+                let delta_y = pixel_size * yi as f64;
+                while si < len_chain_ptrs && delta_y >= exit_intersects[si].dist {
+                    si += 1;
+                }
+                if si >= len_chain_ptrs {
+                    break;
+                }
+                raster_cell_ids[yi as usize] = chain_cell_ids[si];
+                raster_pixel_is_in_cells[yi as usize] = true;
+            }
+            for yi in 0..img.pxls {
+                let ppi = yi * img.pxls + xi;
+                if img.pixel[ppi as usize].num_rays >= MIN_NUM_RAYS_FOR_AVERAGE {
+                    continue;
+                }
+                let y = pixel_size * (0.5 + yi as f64 - img_centre_y_pxls);
+                if raster_pixel_is_in_cells[yi as usize] {
+                    let dci = raster_cell_ids[yi as usize];
+                    for vi in 0..3 {
+                        gis[vi] = rtp.simplices[dci].vertex[vi];
+                        triangle[vi][0] = rays[gis[vi]].x;
+                        triangle[vi][1] = rays[gis[vi]].y;
+                    }
+                    let barys = calc_triangular_barycentric_coords(&triangle, x, y);
+                    for ichan in 0..img.nchan {
+                        let vals_intensity: RVector =
+                            gis.iter().map(|&i| rays[i].intensity[ichan]).collect();
+                        img.pixel[ppi as usize].intense[ichan] += vals_intensity.dot(&barys);
+                        let vals_tau: RVector = gis.iter().map(|&i| rays[i].tau[ichan]).collect();
+                        img.pixel[ppi as usize].tau[ichan] += vals_tau.dot(&barys);
+                    }
+                }
+            }
+        }
+    }
+
+    let last_chan = if par.polarization { 0 } else { img.nchan };
+
+    for ppi in 0..tot_n_img_pxls {
+        for ichan in 0..last_chan {
+            img.pixel[ppi].intense[ichan] += ((-img.pixel[ppi].tau[ichan]).exp() - 1.0) * local_cmb;
+        }
+    }
 
     Ok(())
 }
