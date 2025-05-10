@@ -104,7 +104,7 @@ pub fn run(
 
     if par.n_cont_images > 0 {
         for (_, img) in imgs.iter_mut() {
-            raytrace(img, par, gp.as_mut_slice(), mol_slice, &lam_kap)?;
+            raytrace(img, gp.as_mut_slice(), par, mol_slice, &lam_kap)?;
         }
     }
 
