@@ -7,6 +7,7 @@ pub mod grid;
 pub mod interface;
 pub mod io;
 pub mod lines;
+pub mod macros;
 pub mod messages;
 pub mod pops;
 pub mod raytrace;
