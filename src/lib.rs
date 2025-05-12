@@ -1,6 +1,12 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/ProsiaLAB/assets/refs/heads/main/prosialab.jpeg"
 )]
+//! This is the documentation for the `citrus`.
+//!
+//! is an excitation and radiation transfer code that can be used to predict line and continuum radiation
+//! from an astronomical source. The code uses unstructured 3D Delaunay grids for photon transport and
+//! accelerated Lambda Iteration for population calculations.
+
 pub mod collparts;
 pub mod config;
 pub mod constants;
