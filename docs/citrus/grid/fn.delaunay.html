@@ -19,7 +19,7 @@
     num_points: <a class="primitive" href="https://doc.rust-lang.org/1.86.0/std/primitive.usize.html">usize</a>,
     get_cells: <a class="primitive" href="https://doc.rust-lang.org/1.86.0/std/primitive.bool.html">bool</a>,
     check_sink: <a class="primitive" href="https://doc.rust-lang.org/1.86.0/std/primitive.bool.html">bool</a>,
-) -&gt; <a class="type" href="../../anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="enum" href="enum.DelaunayResult.html" title="enum citrus::grid::DelaunayResult">DelaunayResult</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The principal purpose of this function is to perform a Delaunay triangulation
+) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.95/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="enum" href="enum.DelaunayResult.html" title="enum citrus::grid::DelaunayResult">DelaunayResult</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The principal purpose of this function is to perform a Delaunay triangulation
 for the set of points defined by the input argument ‘g’. This is achieved via
 routines in the 3rd-party package qhull.</p>
 <p>A note about qhull nomenclature: a vertex is what you think it is - i.e., a
