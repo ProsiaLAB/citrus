@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["calc_dust_data","calc_source_fn","gauss_line","get_dtg","get_dust_temp","get_erf","interpolate_kappa","planck_fn","progress_bar"],"mod":["aux","erf","interp","qrng"]};

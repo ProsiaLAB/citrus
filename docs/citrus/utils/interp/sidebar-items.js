@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SplineError"],"fn":["cubic_spline_from_slices"],"struct":["CubicSpline"]};
