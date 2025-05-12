@@ -263,6 +263,7 @@ fn extract_face(fi: usize, dc: &[Simplex], dci: usize, vertex_coords: &RVector) 
     face
 }
 
+/// Finds the index of the old cell in the face list of the new cell.
 fn get_new_entry_face_index(new_cell: &Simplex, dci: usize) -> Result<usize, RTCError> {
     let num_faces = N_DIMS + 1;
     new_cell
@@ -280,6 +281,19 @@ fn get_new_entry_face_index(new_cell: &Simplex, dci: usize) -> Result<usize, RTC
         .ok_or(RTCError::NotFound)
 }
 
+/// Each of the faces of a polytope in N spatial dimensions is itself a polytope in
+/// N-1 dimensions. Each face can therefore be represented via the coordinates of
+/// its vertices expressed in an (N-1)-dimensional frame oriented so as to be
+/// parallel to the face. The function of the present routine is to perform this
+/// decomposition and to return both the (N-1)-dimensional frame (specified via the
+/// coordinates in N dimensions of its N-1 basis vectors) and the coordinates in it
+/// of each of the M face vertices. (If the face is simplicial, M==N.)
+///
+/// The calling routine should call freeFacePlusBasis() after it is finished with
+/// the returned object.
+///
+/// Note that numVertices (a.k.a. M) is expected to be >= numDims (a.k.a. N). The
+/// thing would not make much sense otherwise.
 fn calc_face_in_nminus(nvertices: usize, face: &Face) -> FaceBasis {
     let mut vs = vec![RVector::zeros(nvertices); nvertices - 1];
     let mut facebasis = FaceBasis::new();
