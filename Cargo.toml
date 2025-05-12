@@ -16,5 +16,8 @@ rayon = "1.10.0"
 serde = { version = "1.0.217", features = ["derive"] }
 toml = "0.8.19"
 
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", ".katex-header.html"]
+
 [build-dependencies]
 autotools = "0.2"
