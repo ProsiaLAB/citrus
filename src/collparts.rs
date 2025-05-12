@@ -54,20 +54,20 @@ pub struct Rates {
     pub interp_coeff: isize,
 }
 
-/// This deals with four user-settable fields of [`ConfigInfo`] which relate
+/// This deals with four user-settable fields of [`Parameters`] which relate
 /// to collision partners and their number densities: `collisional_partner_ids`, `nmol_weights`,
 /// `collisional_partner_mol_weights` and `collisional_partner_names`. We have to see if these
 /// (optional) parameters were set, do some basic checks on them, and if they were
 /// set make sure they match the number of density values, which by this time should
-/// be stored in `num_densities` field of [`ConfigInfo`].
+/// be stored in `num_densities` field of [`Parameters`].
 ///
 ///
 ///
 /// The user can specify either, none, or both of these two parameters, with
 /// the following effects:
 ///
-///  Ids | Names | Effect
-///  --- | ----- | ------------
+///  Ids | Names  | Effect
+///  --- | ------ | ------------
 ///  0   | 0      | LAMDA collision partners are assumed and the association between the density functions and the moldatfiles is essentia
 ///  0   | 1      | par->collPartIds is constructed to contain
 /// integers in a sequence from 1 to N. Naturally the user should write matching
