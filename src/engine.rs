@@ -108,7 +108,5 @@ pub fn run(
         }
     }
 
-    // if par.do_mol_calcs {}
-
     Ok(())
 }
