@@ -4,9 +4,6 @@ language = "en"
 src = "src"
 title = "citrus: A Primer on Line Modeling"
 
-[build]
-build-dir = "../docs/book"
-
 [output.html]
 site-url = "/citrus/book"
 theme = "theme"

@@ -1,0 +1,64 @@
+name: Deploy Citrus Documentation
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-upload-docs:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOC_OUTPUT_DIR: target/doc
+      MDBOOK_SOURCE_DIR: book
+      MDBOOK_OUTPUT_DIR: book/book
+      GITHUB_PAGES_OUTPUT_DIR: ./docs # This is your source 'docs' folder!
+      CRATE_NAME: citrus
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      # --- Rustdoc Documentation (will go to prosialab.github.io/citrus/citrus/) ---
+      - name: Generate Rustdoc
+        run: cargo doc --no-deps
+
+      - name: Prepare Rustdoc for deployment
+        run: |
+          # Clean existing Rustdoc output first
+          rm -rf ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/rustdoc
+          mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/rustdoc
+          mv ${{ env.RUSTDOC_OUTPUT_DIR }}/${{ env.CRATE_NAME }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/rustdoc/
+
+      # --- mdBook Documentation (will go to prosialab.github.io/citrus/book/) ---
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 'latest'
+
+      - name: Build mdBook
+        run: mdbook build ${{ env.MDBOOK_SOURCE_DIR }}
+
+      - name: Copy mdBook to GitHub Pages output
+        run: |
+          # Clean existing mdBook output first
+          rm -rf ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book
+          mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book
+          mv ${{ env.MDBOOK_OUTPUT_DIR }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book/
+
+      # --- Upload artifact for GitHub Pages ---
+      - name: Upload artifact for GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.GITHUB_PAGES_OUTPUT_DIR }}
