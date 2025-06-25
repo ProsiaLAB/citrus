@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build-and-upload-docs:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     env:
       RUSTDOC_OUTPUT_DIR: target/doc
       MDBOOK_SOURCE_DIR: book
@@ -31,10 +31,10 @@ jobs:
           toolchain: stable
       
           # --- Install cfitsio C library ---
-      - name: Install CFITSIO library
+      - name: Install CFITSIO library (macOS)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libcfitsio-dev # This package provides cfitsio headers and libraries
+          brew update
+          brew install cfitsio # Homebrew package name for cfitsio
 
       # --- Rustdoc Documentation (will go to prosialab.github.io/citrus/citrus/) ---
       - name: Generate Rustdoc
