@@ -44,8 +44,8 @@ jobs:
         run: |
           # Clean existing Rustdoc output first
           rm -rf ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/rustdoc
-          mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/rustdoc
-          mv ${{ env.RUSTDOC_OUTPUT_DIR }}/${{ env.CRATE_NAME }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/rustdoc/
+          mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/citrus
+          mv ${{ env.RUSTDOC_OUTPUT_DIR }}/${{ env.CRATE_NAME }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/citrus/
 
       # --- mdBook Documentation (will go to prosialab.github.io/citrus/book/) ---
       - name: Setup mdBook
