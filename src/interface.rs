@@ -18,7 +18,7 @@ bitflags! {
     }
 }
 
-#[deprecated]
+#[deprecated = "use `python`-defined function instead"]
 pub fn density(x: f64, y: f64, z: f64) -> f64 {
     let r_min = 0.7 * cc::AU_SI;
 
@@ -32,7 +32,7 @@ pub fn density(x: f64, y: f64, z: f64) -> f64 {
     1.5e6 * (r_to_use / (300.0 * cc::AU_SI)).powf(-1.5) * 1e6
 }
 
-#[deprecated]
+#[deprecated = "use `python`-defined function instead"]
 fn temperature(x: f64, y: f64, z: f64) -> f64 {
     let mut x0: usize = 0;
 
@@ -66,22 +66,22 @@ fn temperature(x: f64, y: f64, z: f64) -> f64 {
     }
 }
 
-#[deprecated]
+#[deprecated = "use `python`-defined function instead"]
 pub const fn abundance() -> f64 {
     1e-9
 }
 
-#[deprecated]
+#[deprecated = "use `python`-defined function instead"]
 pub const fn doppler() -> f64 {
     200.0
 }
 
-#[deprecated]
+#[deprecated = "use `python`-defined function instead"]
 pub const fn gas_to_dust_ratio() -> f64 {
     100.0
 }
 
-#[deprecated]
+#[deprecated = "use `python`-defined function instead"]
 pub fn velocity(x: f64, y: f64, z: f64) -> RVector {
     let r_min = 0.1 * cc::AU_SI;
 
