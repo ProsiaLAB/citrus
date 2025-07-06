@@ -14,6 +14,7 @@ pub mod defaults;
 pub mod engine;
 pub mod grid;
 pub mod interface;
+pub mod model;
 pub mod io;
 pub mod lines;
 pub mod macros;
