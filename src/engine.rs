@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use anyhow::bail;
 use anyhow::Result;
 use bitflags::bitflags;
+use serde::{Serialize, Deserialize};
 
 use crate::collparts::check_user_density_weights;
 use crate::collparts::MolData;
@@ -15,6 +16,7 @@ use crate::types::RVector;
 
 bitflags! {
     /// Which “stages” of data are present in a grid.
+    #[derive(Serialize, Deserialize, Debug, Default)]
     pub struct DataStage: u32 {
         const X              = 1 << 0;  // id, x, sink
         const NEIGHBOURS     = 1 << 1;  // neigh, dir, ds, numNeigh

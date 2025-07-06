@@ -12,6 +12,7 @@ use rand::{Rng, SeedableRng};
 use crate::config::Parameters;
 use crate::constants as cc;
 use crate::defaults::{self, N_DIMS};
+use crate::engine::DataStage;
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
 use crate::types::RVector;
@@ -268,10 +269,11 @@ pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
 }
 
 pub fn read_or_build_grid(par: &mut Parameters) -> Result<Vec<Grid>> {
-    par.data_flags = 0;
+    par.data_flags = DataStage::empty();
     if !par.grid_in_file.is_empty() {
         read_grid_init(par);
     }
+    
 
     Ok(Vec::new())
 }

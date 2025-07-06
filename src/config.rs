@@ -13,6 +13,7 @@ use serde::Deserialize; // StdRng is a good general-purpose algorithm
 use crate::collparts::MolData;
 use crate::constants as cc;
 use crate::defaults::{self, N_DIMS};
+use crate::engine::DataStage;
 use crate::lines::Spec;
 use crate::types::{RMatrix, RVector};
 
@@ -129,7 +130,7 @@ pub struct Parameters {
     #[serde(default)]
     pub n_cont_images: usize,
     #[serde(default)]
-    pub data_flags: isize,
+    pub data_flags: DataStage,
     #[serde(default)]
     pub n_solve_iters_done: usize,
     #[serde(default)]
@@ -327,7 +328,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
     pars.do_pregrid = !pars.pre_grid.is_empty();
     pars.n_solve_iters_done = 0;
     pars.use_abun = true;
-    pars.data_flags = 0;
+    pars.data_flags = DataStage::empty();
 
     if pars.grid_in_file.is_empty() {
         if pars.radius <= 0.0 {

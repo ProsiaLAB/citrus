@@ -2,6 +2,22 @@
 // which serve as the interface to the `citrus` engine.
 use crate::{constants as cc, types::RVector};
 
+use bitflags::bitflags;
+
+bitflags! {
+    pub struct UserFuncFlags: u32 {
+        const DENSITY         = 1 << 0;
+        const TEMPERATURE     = 1 << 1;
+        const ABUNDANCE       = 1 << 2;
+        const MOL_NUM_DENSITY = 1 << 3;
+        const DOPPLER         = 1 << 4;
+        const VELOCITY        = 1 << 5;
+        const MAGFIELD        = 1 << 6;
+        const GASII_DUST      = 1 << 7;
+        const GRID_DENSITY    = 1 << 8;
+    }
+}
+
 pub fn density(x: f64, y: f64, z: f64) -> f64 {
     let r_min = 0.7 * cc::AU_SI;
 
