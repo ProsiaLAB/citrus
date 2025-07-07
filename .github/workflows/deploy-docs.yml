@@ -29,11 +29,15 @@ jobs:
       - name: Build docs
         run: cargo doc --no-deps
 
-      - name: Create .nojekyll
-        run: touch target/doc/.nojekyll
+      - name: Prepare publish directory
+        run: |
+          mkdir -p publish/docs 
+          cp -r target/doc/* publish/docs/ 
+          cp static/index.html publish/ 
+          touch publish/.nojekyll
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./target/doc
+          publish_dir: ./publish
