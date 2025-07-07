@@ -3,18 +3,17 @@ name: Deploy Rust Docs
 on:
   push:
     branches:
-      - main  # Change if your default branch is different
+      - main  # or your default branch
 
 permissions:
-  contents: write  # Required to push to gh-pages
+  contents: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -22,8 +21,11 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Build documentation
+      - name: Build docs
         run: cargo doc --no-deps
+
+      - name: Create .nojekyll
+        run: touch target/doc/.nojekyll
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
