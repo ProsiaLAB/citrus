@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>citrus</title>
+    <link href="https://iosevka-webfonts.github.io/iosevka/Iosevka.css" rel="stylesheet" />
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: 'Iosevka Web', monospace;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            text-align: left;
+        }
+
+        .logo {
+            display: block;
+            margin: 0 auto 2rem auto;
+            width: 96px;
+            height: auto;
+        }
+
+        h1,
+        h2 {
+            color: #ffffff;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        p,
+        li {
+            color: #aaaaaa;
+            margin-bottom: 1rem;
+        }
+
+        a {
+            color: #00afff;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+
+        a:hover {
+            border-color: #00afff;
+        }
+
+        ul {
+            padding-left: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #444;
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg"
+            alt="ProsiaLAB Logo" class="logo" />
+        <h1>citrus</h1>
+        <p><strong>citrus</strong> is a non-LTE line modeling engine (implementation of <code>LIME</code> in Rust,
+            originally by <a href="https://ui.adsabs.harvard.edu/abs/2010A&A...523A..25B/abstract"
+                target="_blank">Brinch & Hogerheijde, 2010</a>).
+            <code>LIME</code> is available on <a href="https://github.com/lime-rt/lime" target="_blank">GitHub</a>.
+        </p>
+        <hr />
+        <h2>Documentation & Resources</h2>
+        <ul>
+            <li><a href="./citrus/">Rust Documentation</a></li>
+            <li><a href="https://github.com/ProsiaLAB/books/citrus">Reference Book</a></li>
+            <li><a href="https://github.com/ProsiaLAB/citrus" target="_blank">Source Code on GitHub</a></li>
+        </ul>
+    </div>
+</body>
+
+</html>
