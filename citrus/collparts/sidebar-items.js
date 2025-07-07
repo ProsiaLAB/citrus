@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_user_density_weights"],"struct":["CollisionalPartnerData","MolData","Rates"]};

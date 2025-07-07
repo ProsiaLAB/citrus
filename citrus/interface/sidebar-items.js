@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["abundance","density","doppler","gas_to_dust_ratio","velocity"],"struct":["UserFuncFlags"]};
