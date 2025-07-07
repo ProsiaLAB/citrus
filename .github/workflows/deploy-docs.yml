@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +20,11 @@ jobs:
         with:
           toolchain: stable
           override: true
+        
+      - name: Install CFITSIO library (macOS)
+        run: |
+          brew update
+          brew install cfitsio 
 
       - name: Build docs
         run: cargo doc --no-deps
