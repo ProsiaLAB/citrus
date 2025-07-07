@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Orientation","RTCError","RTCResult"],"fn":["raytrace"],"struct":["BaryVelocityBuffer","ChainContext","Face","FaceBasis","GridInterp","Intersect","RTPreparation","RayData","Simplex"]};

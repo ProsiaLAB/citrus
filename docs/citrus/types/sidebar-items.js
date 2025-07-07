@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"type":["BVector","IVector","RMatrix","RTensor","RVecView","RVector","UVector"]};

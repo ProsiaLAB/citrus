@@ -1,70 +1,32 @@
-name: Deploy Citrus Documentation
+name: Deploy Rust Docs
 
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:
+      - main  # Change if your default branch is different
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write  # Required to push to gh-pages
 
 jobs:
-  build-and-upload-docs:
-    runs-on: macos-latest
-    env:
-      RUSTDOC_OUTPUT_DIR: target/doc
-      MDBOOK_SOURCE_DIR: book
-      MDBOOK_OUTPUT_DIR: book/book
-      GITHUB_PAGES_OUTPUT_DIR: ./docs # This is your source 'docs' folder!
-      CRATE_NAME: citrus
+  deploy:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      
-          # --- Install cfitsio C library ---
-      - name: Install CFITSIO library (macOS)
-        run: |
-          brew update
-          brew install cfitsio # Homebrew package name for cfitsio
+          override: true
 
-      # --- Rustdoc Documentation (will go to prosialab.github.io/citrus/citrus/) ---
-      - name: Generate Rustdoc
+      - name: Build documentation
         run: cargo doc --no-deps
 
-      - name: Prepare Rustdoc for deployment
-        run: |
-          # Clean existing Rustdoc output first
-          rm -rf ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/citrus
-          mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/citrus
-          mv ${{ env.RUSTDOC_OUTPUT_DIR }}/${{ env.CRATE_NAME }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/citrus/
-
-      # --- mdBook Documentation (will go to prosialab.github.io/citrus/book/) ---
-      - name: Setup mdBook
-        uses: peaceiris/actions-mdbook@v2
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          mdbook-version: 'latest'
-
-      - name: Build mdBook
-        run: mdbook build ${{ env.MDBOOK_SOURCE_DIR }}
-
-      - name: Copy mdBook to GitHub Pages output
-        run: |
-          # Clean existing mdBook output first
-          rm -rf ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book
-          mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book
-          mv ${{ env.MDBOOK_OUTPUT_DIR }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book/
-
-      # --- Upload artifact for GitHub Pages ---
-      - name: Upload artifact for GitHub Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ${{ env.GITHUB_PAGES_OUTPUT_DIR }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc

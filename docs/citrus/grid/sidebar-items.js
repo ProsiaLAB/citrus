@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["DelaunayResult"],"fn":["delaunay","pre_define","read_or_build_grid","set_default_grid"],"struct":["Cell","Grid","GridInfo","Keyword","Link","MoleculeInfo","Point"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["RayTraceAlgorithm","Sampling","Unit"],"fn":["load_config","parse_config"],"struct":["Config","Image","Parameters"]};
