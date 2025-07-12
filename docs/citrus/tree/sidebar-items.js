@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_RECURSION","N_RANDOMS"],"struct":["SubCellType","TreeRandomConstantType","TreeRandomInternalType","TreeType"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_RECURSION","N_RANDOMS"],"struct":["SubCellType","TreeRandomConstantType","TreeRandomInternalType","TreeType"],"type":["MonitorFn"]};

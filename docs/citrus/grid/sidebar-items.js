@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DelaunayResult"],"fn":["delaunay","pre_define","read_or_build_grid","set_default_grid"],"struct":["Cell","Grid","GridInfo","Keyword","Link","MoleculeInfo","Point"]};
+window.SIDEBAR_ITEMS = {"enum":["DelaunayResult"],"fn":["check_grid_densities","delaunay","dist_calc","pre_define","read_grid","read_grid_init","read_or_build_grid","reorder_grid","set_default_grid","write_vtk_unstructured_points"],"struct":["Cell","Grid","GridInfo","Keyword","Link","MoleculeInfo","Point"]};

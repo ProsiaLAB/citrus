@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["source_fn_cont","source_fn_line","source_fn_polarized"]};
+window.SIDEBAR_ITEMS = {"fn":["source_fn_cont","source_fn_line","source_fn_polarized","stokes_angles"]};

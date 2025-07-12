@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["check_user_density_weights"],"struct":["CollisionalPartnerData","MolData","Rates"]};
+window.SIDEBAR_ITEMS = {"fn":["check_user_density_weights"],"struct":["CollPartUserSetFlags","CollisionalPartnerData","MolData","Rates"]};

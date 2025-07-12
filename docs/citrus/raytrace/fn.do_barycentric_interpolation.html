@@ -1,0 +1,52 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Performs linear interpolation over a simplex (triangle) using barycentric coordinates."><title>do_barycentric_interpolation in citrus::raytrace - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1a91846b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="citrus" data-themes="" data-resource-suffix="" data-rustdoc-version="1.88.0 (6b00bc388 2025-06-23)" data-channel="1.88.0" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.css" integrity="sha384-9eLZqc9ds8eNjO3TmqPeYcDj8n+Qfa4nuSiGYa6DjLNcv9BtN69ZIulL9+8CqC9Y" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.js"                  integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/contrib/auto-render.min.js"    integrity="sha384-kmZOZB5ObwgQnS/DuDg6TScgOiWWBiVt0plIRkZCmE6rDZGrEOQeHM5PcHi+nyqe" crossorigin="anonymous"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        renderMathInElement(document.body, {
+            delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "\\(", right: "\\)", display: false},
+                {left: "$", right: "$", display: false},
+                {left: "\\[", right: "\\]", display: true}
+            ]
+        });
+    });
+</script>
+
+</head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button><a class="logo-container" href="../../citrus/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt=""></a></nav><nav class="sidebar"><div class="sidebar-crate"><a class="logo-container" href="../../citrus/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt="logo"></a><h2><a href="../../citrus/index.html">citrus</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">do_<wbr>barycentric_<wbr>interpolation</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#note" title="Note">Note</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In citrus::<wbr>raytrace</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">citrus</a>::<wbr><a href="index.html">raytrace</a></div><h1>Function <span class="fn">do_barycentric_interpolation</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/citrus/raytrace.rs.html#1000-1046">Source</a> </span></div><pre class="rust item-decl"><code>fn do_barycentric_interpolation(
+    gip: &amp;mut <a class="struct" href="struct.GridInterp.html" title="struct citrus::raytrace::GridInterp">GridInterp</a>,
+    gp: &amp;[<a class="struct" href="../grid/struct.Grid.html" title="struct citrus::grid::Grid">Grid</a>],
+    mol_data: &amp;[<a class="struct" href="../collparts/struct.MolData.html" title="struct citrus::collparts::MolData">MolData</a>],
+    par: &amp;<a class="struct" href="../config/struct.Parameters.html" title="struct citrus::config::Parameters">Parameters</a>,
+    gis: &amp;[<a class="primitive" href="https://doc.rust-lang.org/1.88.0/std/primitive.usize.html">usize</a>; <a class="primitive" href="https://doc.rust-lang.org/1.88.0/std/primitive.array.html">3</a>],
+    intersect: &amp;<a class="struct" href="struct.Intersect.html" title="struct citrus::raytrace::Intersect">Intersect</a>,
+    x_cmpts_ray: <a class="type" href="../types/type.RVector.html" title="type citrus::types::RVector">RVector</a>,
+)</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Performs linear interpolation over a simplex (triangle) using barycentric coordinates.</p>
+<p>This function takes:</p>
+<ol>
+<li><code>N</code> values <code>V_i</code> at the vertices of a simplex (triangle),</li>
+<li>The barycentric coordinates of a point within the simplex,
+and returns the interpolated value at that point.</li>
+</ol>
+<p>This approach is equivalent to using linear shape functions in Finite Element Analysis.
+The interpolation uses shape functions <code>Q_i</code>, where each shape function:</p>
+<ul>
+<li>Is zero at all vertices except the <code>i</code>-th,</li>
+<li>Has value one at the <code>i</code>-th vertex.</li>
+</ul>
+<p>The interpolated value at point <code>r_</code> is computed as:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>          N
+          ┌
+f(r_) =   │   V_i * Q_i(r_)
+          └
+         i=<span class="number">1</span></code></pre></div>
+<p>For linear interpolation, each shape function <code>Q_i(r_)</code> is equal to the <code>i</code>-th barycentric coordinate <code>B_i</code> of <code>r_</code>.</p>
+<p>In this case, <code>N == 3</code>; the simplex is a triangular face of a Delaunay cell,
+and the interpolation point is the intersection of a ray with that face.
+This technique is used to interpolate several grid-based quantities.</p>
+<p>For further reference, see the Wikipedia article on <a href="https://en.wikipedia.org/wiki/Barycentric_coordinate_system">Barycentric coordinates</a>.</p>
+<h2 id="note"><a class="doc-anchor" href="#note">§</a>Note</h2>
+<p>This is called from within the multi-threaded block.</p>
+</div></details></section></div></main></body></html>

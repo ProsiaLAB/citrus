@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["HaltonError"],"struct":["Halton"]};
+window.SIDEBAR_ITEMS = {"enum":["HaltonError"],"fn":["halton"],"static":["PRIMES"],"struct":["Halton"]};

@@ -1,0 +1,58 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="This function rotates the B-field vector from the model frame to the observer frame, then calculates and returns some useful values which will in function `source_fn_polarized()` make it easy to obtain the Stokes parameters of polarized submillimetre dust emission. (For an explanation of the reasons for choosing the particular quantities we do, see the comment in that function.)"><title>stokes_angles in citrus::source - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1a91846b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="citrus" data-themes="" data-resource-suffix="" data-rustdoc-version="1.88.0 (6b00bc388 2025-06-23)" data-channel="1.88.0" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.css" integrity="sha384-9eLZqc9ds8eNjO3TmqPeYcDj8n+Qfa4nuSiGYa6DjLNcv9BtN69ZIulL9+8CqC9Y" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.js"                  integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/contrib/auto-render.min.js"    integrity="sha384-kmZOZB5ObwgQnS/DuDg6TScgOiWWBiVt0plIRkZCmE6rDZGrEOQeHM5PcHi+nyqe" crossorigin="anonymous"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        renderMathInElement(document.body, {
+            delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "\\(", right: "\\)", display: false},
+                {left: "$", right: "$", display: false},
+                {left: "\\[", right: "\\]", display: true}
+            ]
+        });
+    });
+</script>
+
+</head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button><a class="logo-container" href="../../citrus/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt=""></a></nav><nav class="sidebar"><div class="sidebar-crate"><a class="logo-container" href="../../citrus/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt="logo"></a><h2><a href="../../citrus/index.html">citrus</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">stokes_<wbr>angles</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#note" title="Note">Note</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In citrus::<wbr>source</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">citrus</a>::<wbr><a href="index.html">source</a></div><h1>Function <span class="fn">stokes_angles</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/citrus/source.rs.html#55-75">Source</a> </span></div><pre class="rust item-decl"><code>fn stokes_angles(
+    mag_field: &amp;<a class="type" href="../types/type.RVector.html" title="type citrus::types::RVector">RVector</a>,
+    rotation_matrix: &amp;<a class="type" href="../types/type.RMatrix.html" title="type citrus::types::RMatrix">RMatrix</a>,
+) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.95/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="type" href="../types/type.RVector.html" title="type citrus::types::RVector">RVector</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>This function rotates the B-field vector from the model frame to the observer
+frame, then calculates and returns some useful values which will in function
+<code>source_fn_polarized()</code> make it easy to obtain the Stokes parameters of polarized
+submillimetre dust emission. (For an explanation of the reasons for choosing the
+particular quantities we do, see the comment in that function.)</p>
+<p>Whenever one deals with polarized light, it is important to specify the
+coordinate systems carefully. In LIME the observer frame is defined such that,
+when the observer looks at the sky, the frame axes appear as follows:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>           ^ Y
+           |
+           |
+           |
+    &lt;------+
+    X</code></pre></div>
+<p>The Z axis points into the page, away from the observer. Comparing this to
+normal astronomical coordinates one can see that X is in the direction of +ve
+right ascension and Y in the direction of +ve declination.</p>
+<p>The IAU-recommended coordinate frame for expressing polarized light however is</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>           ^ X
+           |
+           |
+           |
+    &lt;------O
+    Y</code></pre></div>
+<p>with Z now emerging from the page (i.e pointing in the direction of propagation,
+towards the observer).</p>
+<p>A vector defined in the LIME model basis can be converted to the observer basis
+by post-multiplying it with the image rotation matrix rotMat. (Another way of
+putting this is that the rows of rotMat are the unit vectors of the model
+coordinate frame expressed in the observer basis.) For the B field, this is
+expressed symbolically as</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>    Bp^T = B^T * rotation_matrix</code></pre></div>
+<p>where ^T denotes transpose.</p>
+<h2 id="note"><a class="doc-anchor" href="#note">§</a>Note</h2>
+<p>This is called from within a multi-threaded block.</p>
+</div></details></section></div></main></body></html>

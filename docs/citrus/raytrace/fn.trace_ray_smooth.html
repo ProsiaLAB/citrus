@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="For a given image pixel position, this function evaluates the intensity of the total light emitted/absorbed along that line of sight through the (possibly rotated) model. The calculation is performed for several frequencies, one per channel of the output image."><title>trace_ray_smooth in citrus::raytrace - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1a91846b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="citrus" data-themes="" data-resource-suffix="" data-rustdoc-version="1.88.0 (6b00bc388 2025-06-23)" data-channel="1.88.0" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.css" integrity="sha384-9eLZqc9ds8eNjO3TmqPeYcDj8n+Qfa4nuSiGYa6DjLNcv9BtN69ZIulL9+8CqC9Y" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.js"                  integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/contrib/auto-render.min.js"    integrity="sha384-kmZOZB5ObwgQnS/DuDg6TScgOiWWBiVt0plIRkZCmE6rDZGrEOQeHM5PcHi+nyqe" crossorigin="anonymous"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        renderMathInElement(document.body, {
+            delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "\\(", right: "\\)", display: false},
+                {left: "$", right: "$", display: false},
+                {left: "\\[", right: "\\]", display: true}
+            ]
+        });
+    });
+</script>
+
+</head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button><a class="logo-container" href="../../citrus/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt=""></a></nav><nav class="sidebar"><div class="sidebar-crate"><a class="logo-container" href="../../citrus/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt="logo"></a><h2><a href="../../citrus/index.html">citrus</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">trace_<wbr>ray_<wbr>smooth</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#note" title="Note">Note</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In citrus::<wbr>raytrace</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">citrus</a>::<wbr><a href="index.html">raytrace</a></div><h1>Function <span class="fn">trace_ray_smooth</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/citrus/raytrace.rs.html#1182-1542">Source</a> </span></div><pre class="rust item-decl"><code>fn trace_ray_smooth(
+    ray: &amp;mut <a class="struct" href="struct.RayData.html" title="struct citrus::raytrace::RayData">RayData</a>,
+    gips: &amp;mut [<a class="struct" href="struct.GridInterp.html" title="struct citrus::raytrace::GridInterp">GridInterp</a>],
+    gp: &amp;[<a class="struct" href="../grid/struct.Grid.html" title="struct citrus::grid::Grid">Grid</a>],
+    img: &amp;<a class="struct" href="../config/struct.Image.html" title="struct citrus::config::Image">Image</a>,
+    par: &amp;<a class="struct" href="../config/struct.Parameters.html" title="struct citrus::config::Parameters">Parameters</a>,
+    mol_data: &amp;[<a class="struct" href="../collparts/struct.MolData.html" title="struct citrus::collparts::MolData">MolData</a>],
+    rtp: &amp;<a class="struct" href="struct.RTPreparation.html" title="struct citrus::raytrace::RTPreparation">RTPreparation</a>,
+) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.95/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.88.0/std/primitive.unit.html">()</a>, <a class="enum" href="enum.RTCError.html" title="enum citrus::raytrace::RTCError">RTCError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>For a given image pixel position, this function evaluates the intensity of the
+total light emitted/absorbed along that line of sight through the (possibly
+rotated) model. The calculation is performed for several frequencies, one per
+channel of the output image.</p>
+<p>Note that the algorithm employed here to solve the RTE is similar to that
+employed in the function calculateJBar() which calculates the average radiant
+flux impinging on a grid cell: namely the notional photon is started at the side
+of the model near the observer and ‘propagated’ in the receding direction until
+it ‘reaches’ the far side. This is rather non-physical in conception but it
+makes the calculation easier.</p>
+<p>This version of traceray implements a new algorithm in which the population
+values are interpolated linearly from those at the vertices of the Delaunay cell
+which the working point falls within.</p>
+<p>A note about the object ‘gips’: this is an array with 3 elements, each one a
+struct of type ‘gridInterp’. This struct is meant to store as many of the
+grid-point quantities (interpolated from the appropriate values at actual grid
+locations) as are necessary for solving the radiative transfer equations along
+the ray path. The first 2 entries give the values for the entry and exit points
+to a Delaunay cell, but which is which can change, and is indicated via the
+variables entryI and exitI (this is a convenience to avoid copying the values,
+since the values for the exit point of one cell are obviously just those for
+entry point of the next). The third entry stores values interpolated along the
+ray path within a cell.</p>
+<h2 id="note"><a class="doc-anchor" href="#note">§</a>Note</h2>
+<p>This is called from within the multi-threaded block.</p>
+</div></details></section></div></main></body></html>
