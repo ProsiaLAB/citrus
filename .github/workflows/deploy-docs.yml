@@ -27,7 +27,7 @@ jobs:
           brew install cfitsio 
 
       - name: Build docs
-        run: cargo doc --no-deps
+        run: RUSTDOCFLAGS="--html-in-header static/katex-header.html" cargo doc --no-deps --document-private-items
 
       - name: Prepare publish directory
         run: |
