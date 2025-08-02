@@ -34,6 +34,8 @@ jobs:
           mkdir -p publish/docs 
           cp -r target/doc/* publish/docs/ 
           cp static/index.html publish/ 
+          cp static/favicon.ico publish/
+          cp static/profile.jpg publish/
           touch publish/.nojekyll
 
       - name: Deploy to GitHub Pages
