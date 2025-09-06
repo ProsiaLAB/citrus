@@ -1,4 +1,4 @@
-use crate::types::RVector;
+use extensions::types::RVector;
 
 pub struct GridPointData {
     pub jbar: RVector,

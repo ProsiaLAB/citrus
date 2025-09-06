@@ -1,10 +1,10 @@
 use anyhow::bail;
 use anyhow::Result;
 use bitflags::bitflags;
+use extensions::types::{RVector, UVector};
 
-use crate::defaults;
 use crate::config::Parameters;
-use crate::types::{RVector, UVector};
+use crate::defaults;
 
 #[derive(Debug, Default)]
 pub struct CollisionalPartnerData {
@@ -62,7 +62,6 @@ bitflags! {
         const MOLWEIGHTS  = 1 << 3;
     }
 }
-
 
 /// This deals with four user-settable fields of [`Parameters`] which relate
 /// to collision partners and their number densities: `collisional_partner_ids`, `nmol_weights`,

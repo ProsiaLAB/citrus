@@ -1,11 +1,11 @@
 use anyhow::bail;
 use anyhow::Result;
+use extensions::types::{RMatrix, RVector};
 
 use crate::collparts::MolData;
 use crate::constants as cc;
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
-use crate::types::{RMatrix, RVector};
 
 /// This function rotates the B-field vector from the model frame to the observer
 /// frame, then calculates and returns some useful values which will in function

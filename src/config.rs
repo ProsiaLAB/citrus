@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use extensions::types::{RMatrix, RVector};
 use ndarray::array;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -15,7 +16,6 @@ use crate::constants as cc;
 use crate::defaults::{self, N_DIMS};
 use crate::engine::DataStage;
 use crate::lines::Spec;
-use crate::types::{RMatrix, RVector};
 
 /// A container for all the images in the configuration file
 type Images = HashMap<String, Image>;

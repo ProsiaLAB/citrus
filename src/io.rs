@@ -4,8 +4,7 @@ use std::io::BufReader;
 use std::path::Path;
 
 use anyhow::Result;
-
-use crate::types::RVector;
+use extensions::types::RVector;
 
 pub fn read_dust_file(filename: &str) -> Result<(RVector, RVector)> {
     let path = Path::new(filename);

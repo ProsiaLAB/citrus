@@ -1,6 +1,7 @@
+use extensions::types::RVector;
+
 use crate::collparts::Rates;
 use crate::lines::ContinuumLine;
-use crate::types::RVector;
 
 #[derive(Debug, Default)]
 pub struct Populations {

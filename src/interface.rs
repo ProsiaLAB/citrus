@@ -1,6 +1,9 @@
-// Temporary module to define user-facing functions
-// which serve as the interface to the `citrus` engine.
-use crate::{constants as cc, types::RVector};
+//! Temporary module to define user-facing functions
+//! which serve as the interface to the `citrus` engine.
+
+use extensions::types::RVector;
+
+use crate::constants as cc;
 
 use bitflags::bitflags;
 

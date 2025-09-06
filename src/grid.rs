@@ -5,6 +5,7 @@ use std::num::ParseFloatError;
 
 use anyhow::Result;
 use anyhow::{anyhow, bail};
+use extensions::types::RVector;
 use qhull::QhBuilder;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -15,7 +16,6 @@ use crate::defaults::{self, N_DIMS};
 use crate::engine::DataStage;
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
-use crate::types::RVector;
 use crate::utils;
 
 #[derive(Default)]
@@ -273,7 +273,6 @@ pub fn read_or_build_grid(par: &mut Parameters) -> Result<Vec<Grid>> {
     if !par.grid_in_file.is_empty() {
         read_grid_init(par);
     }
-    
 
     Ok(Vec::new())
 }

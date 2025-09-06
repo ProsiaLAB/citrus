@@ -1,6 +1,5 @@
+use extensions::types::RVector;
 use serde::{Deserialize, Serialize};
-
-use crate::types::RVector;
 
 #[derive(Debug, Default)]
 pub struct ContinuumLine {

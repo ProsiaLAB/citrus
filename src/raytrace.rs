@@ -5,6 +5,7 @@ use std::vec;
 
 use anyhow::Result;
 use anyhow::{anyhow, bail};
+use extensions::types::{RMatrix, RVector, UVector};
 use ndarray_linalg::{Solve, SVD};
 use qhull::QhBuilder;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
@@ -21,7 +22,6 @@ use crate::interface::{gas_to_dust_ratio, velocity};
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
 use crate::source::{source_fn_cont, source_fn_line, source_fn_polarized};
-use crate::types::{RMatrix, RVector, UVector};
 use crate::utils::{
     calc_dust_data, calc_source_fn, gauss_line, get_dtg, get_dust_temp, get_erf, interpolate_kappa,
     planck_fn,

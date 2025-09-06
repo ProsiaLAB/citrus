@@ -2,10 +2,10 @@
 use std::io::{self, Write}; // Import the Write trait
 
 use anyhow::Result;
+use extensions::types::{RVecView, RVector};
 
 use crate::config::Parameters;
 use crate::constants as cc;
-use crate::types::{RVecView, RVector};
 
 use self::erf::erf;
 use self::interp::{CubicSpline, SplineError};
@@ -159,7 +159,7 @@ pub fn progress_bar(progress: f64, width: usize) {
 pub mod interp {
     use anyhow::Result;
 
-    use crate::types::{RVecView, RVector};
+    use extensions::types::{RVecView, RVector};
 
     pub struct CubicSpline {
         x: RVector,

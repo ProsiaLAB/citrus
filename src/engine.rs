@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use anyhow::bail;
 use anyhow::Result;
 use bitflags::bitflags;
-use serde::{Serialize, Deserialize};
+use extensions::types::RVector;
+use serde::{Deserialize, Serialize};
 
 use crate::collparts::check_user_density_weights;
 use crate::collparts::MolData;
@@ -12,7 +13,6 @@ use crate::grid;
 use crate::io::read_dust_file;
 use crate::pops::popsin;
 use crate::raytrace::raytrace;
-use crate::types::RVector;
 
 bitflags! {
     /// Which “stages” of data are present in a grid.

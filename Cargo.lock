@@ -141,6 +141,7 @@ dependencies = [
  "autotools",
  "bitflags",
  "blas-src",
+ "extensions",
  "fitsio",
  "ndarray",
  "ndarray-linalg",
@@ -208,6 +209,14 @@ checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
  "windows-sys",
+]
+
+[[package]]
+name = "extensions"
+version = "0.1.0"
+source = "git+https://github.com/ProsiaLAB/extensions#e6a38f38a247ff459659c28aff982477fcab62dd"
+dependencies = [
+ "ndarray",
 ]
 
 [[package]]

@@ -1,8 +1,10 @@
-// Default functions for `citrus` interface
+//! Default functions for `citrus` interface
+
+use extensions::types::RVector;
+
 use crate::collparts::MolData;
 use crate::constants as cc;
 use crate::interface;
-use crate::types::RVector;
 
 pub const N_DIMS: usize = 3;
 
