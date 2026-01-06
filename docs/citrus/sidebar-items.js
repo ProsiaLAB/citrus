@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["collparts","config","constants","defaults","engine","grid","interface","io","lines","macros","messages","model","pops","raytrace","solver","source","tree","utils"]};
+window.SIDEBAR_ITEMS = {"mod":["collparts","config","constants","defaults","engine","grid","interface","io","lines","macros","pops","raytrace","solver","source","tree","utils"]};

@@ -1,2 +1,2 @@
-createSrcSidebar('[["citrus",["",[["model",[],["composite.rs","defaults.rs","mod.rs","python.rs","traits.rs"]]],["collparts.rs","config.rs","constants.rs","defaults.rs","engine.rs","grid.rs","interface.rs","io.rs","lib.rs","lines.rs","macros.rs","messages.rs","pops.rs","raytrace.rs","solver.rs","source.rs","tree.rs","utils.rs"]]]]');
-//{"start":19,"fragment_lengths":[312]}
+createSrcSidebar('[["citrus",["",[],["collparts.rs","config.rs","constants.rs","defaults.rs","engine.rs","grid.rs","interface.rs","io.rs","lib.rs","lines.rs","macros.rs","pops.rs","raytrace.rs","solver.rs","source.rs","tree.rs","utils.rs"]]]]');
+//{"start":19,"fragment_lengths":[222]}
