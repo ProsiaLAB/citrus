@@ -5,7 +5,7 @@ use std::num::ParseFloatError;
 
 use anyhow::Result;
 use anyhow::{anyhow, bail};
-use extensions::types::RVector;
+use prosia_extensions::types::RVector;
 use qhull::QhBuilder;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};

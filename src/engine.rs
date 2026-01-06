@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::bail;
 use anyhow::Result;
 use bitflags::bitflags;
-use extensions::types::RVector;
+use prosia_extensions::types::RVector;
 use serde::{Deserialize, Serialize};
 
 use crate::collparts::check_user_density_weights;

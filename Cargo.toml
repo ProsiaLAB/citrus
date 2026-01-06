@@ -1,7 +1,7 @@
 [package]
 name = "citrus"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 anyhow = "1.0.95"
@@ -10,13 +10,12 @@ blas-src = { version = "0.11.1", features = ["accelerate"] }
 fitsio = "0.21.6"
 ndarray = { version = "0.16.1", features = ["rayon", "serde", "blas"] }
 ndarray-linalg = "0.17.0"
-pyo3 = { version = "0.25.1", features = ["auto-initialize"] }
+prosia-extensions = "0.1.5"
 qhull = { git = "https://github.com/LucaCiucci/qhull-rs" }
 rand = "0.9.1"
 rayon = "1.10.0"
 serde = { version = "1.0.217", features = ["derive"] }
 toml = "0.8.19"
-extensions = { git = "https://github.com/ProsiaLAB/extensions" }
 
 [build-dependencies]
 autotools = "0.2"

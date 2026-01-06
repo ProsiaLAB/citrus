@@ -1,6 +1,6 @@
-use anyhow::bail;
 use anyhow::Result;
-use extensions::types::{RMatrix, RVector};
+use anyhow::bail;
+use prosia_extensions::types::{RMatrix, RVector};
 
 use crate::collparts::MolData;
 use crate::constants as cc;

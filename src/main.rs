@@ -6,12 +6,8 @@ use anyhow::{anyhow, bail};
 
 use citrus::config::{load_config, parse_config};
 use citrus::engine;
-use citrus::messages;
 
 fn main() -> Result<()> {
-    messages::greetings();
-    // messages::description();
-
     // Collect command line arguments
     let args: Vec<String> = env::args().skip(1).collect();
 
@@ -40,6 +36,8 @@ fn main() -> Result<()> {
         path.to_str()
             .ok_or_else(|| anyhow!("Error: The canonicalized path is not valid UTF-8."))?,
     )?;
+
+    dbg!("Loaded config: {:?}", &input_config);
 
     // Parse the loaded `Config` struct
     let (mut par, mut imgs, mol_data) = parse_config(input_config)?;

@@ -1,7 +1,7 @@
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use bitflags::bitflags;
-use extensions::types::{RVector, UVector};
+use prosia_extensions::types::{RVector, UVector};
 
 use crate::config::Parameters;
 use crate::defaults;

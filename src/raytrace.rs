@@ -5,8 +5,8 @@ use std::vec;
 
 use anyhow::Result;
 use anyhow::{anyhow, bail};
-use extensions::types::{RMatrix, RVector, UVector};
-use ndarray_linalg::{Solve, SVD};
+use ndarray_linalg::{SVD, Solve};
+use prosia_extensions::types::{RMatrix, RVector, UVector};
 use qhull::QhBuilder;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
@@ -15,8 +15,8 @@ use crate::config::RayTraceAlgorithm;
 use crate::config::{Image, Parameters};
 use crate::constants as cc;
 use crate::defaults::N_DIMS;
-use crate::grid::delaunay;
 use crate::grid::DelaunayResult;
+use crate::grid::delaunay;
 use crate::grid::{Cell, Grid};
 use crate::interface::{gas_to_dust_ratio, velocity};
 use crate::lines::ContinuumLine;
@@ -95,6 +95,110 @@ pub struct ChainContext {
     cell_exit_intersects: Vec<Intersect>,
 }
 
+impl ChainContext {
+    fn build_ray_cell_chain(
+        &mut self,
+        x: &RVector,
+        dir: &RVector,
+        rtp: &RTPreparation,
+        simplices: &[Simplex],
+    ) -> Result<i32, RTCError> {
+        const NUM_FACES: usize = N_DIMS + 1;
+
+        let buffer_size = 1024;
+        let mut intersects = Vec::with_capacity(NUM_FACES);
+        let mut good_exit_fis = Vec::new();
+        let mut marginal_exit_fis = Vec::new();
+
+        let mut following_single_chain = true;
+        while following_single_chain {
+            self.cell_visited[self.isimplex] = true;
+            if self.ncells_in_chain >= self.len_chain_ptrs {
+                self.len_chain_ptrs += buffer_size;
+                self.chain_of_cell_ids.resize(self.len_chain_ptrs, 0);
+                self.cell_exit_intersects
+                    .resize_with(self.len_chain_ptrs, Intersect::default);
+            }
+            (self.chain_of_cell_ids)[self.ncells_in_chain] = self.isimplex;
+            for fi in 0..NUM_FACES {
+                if fi != self.entry_face_index
+                    && (simplices[self.isimplex].neigh[fi].is_none()
+                        || simplices[self.isimplex].neigh[fi]
+                            .is_some_and(|n| !(self.cell_visited)[n]))
+                {
+                    let face = rtp.simplices[self.isimplex].extract_face(fi, &rtp.vertex_coords);
+                    let mut intersect = face.intersect_line_with_face(x, dir)?;
+                    intersect.fi = fi;
+                    if intersect.orientation == Orientation::ExitFace {
+                        if intersect.coll_par - cc::CITRUS_RT_EPS > 0.0 {
+                            good_exit_fis.push(fi);
+                        } else if intersect.coll_par + cc::CITRUS_RT_EPS > 0.0 {
+                            marginal_exit_fis.push(fi);
+                        }
+                    }
+                    intersects.push(intersect);
+                }
+            }
+            if good_exit_fis.len() > 1 {
+                return Err(RTCError::MultipleCandidates);
+            } else if good_exit_fis.len() == 1 || marginal_exit_fis.len() == 1 {
+                let exit_fi = if good_exit_fis.len() == 1 {
+                    good_exit_fis[0]
+                } else {
+                    marginal_exit_fis[0]
+                };
+                (self.cell_exit_intersects)[self.ncells_in_chain] =
+                    mem::take(&mut intersects[exit_fi]);
+                self.ncells_in_chain += 1;
+                if simplices[self.isimplex].neigh[exit_fi].is_none() {
+                    self.chain_of_cell_ids.resize(self.ncells_in_chain, 0);
+                    self.cell_exit_intersects
+                        .resize_with(self.ncells_in_chain, Intersect::default);
+                    self.len_chain_ptrs = self.ncells_in_chain;
+                    return Ok(0);
+                } else if let Some(neigh_idx) = simplices[self.isimplex].neigh[exit_fi] {
+                    self.entry_face_index =
+                        simplices[neigh_idx].get_new_entry_face_index(self.isimplex)?;
+                    self.isimplex = neigh_idx;
+                } else {
+                    return Err(RTCError::NotFound);
+                };
+            } else {
+                following_single_chain = false;
+            }
+        }
+
+        if marginal_exit_fis.is_empty() {
+            return Ok(3);
+        }
+
+        let mut i = 0;
+        let mut status = 4;
+        while i < marginal_exit_fis.len() && status > 0 {
+            let exit_fi = marginal_exit_fis[i];
+            (self.cell_exit_intersects)[self.ncells_in_chain] = mem::take(&mut intersects[exit_fi]);
+            if simplices[self.isimplex].neigh[exit_fi].is_none() {
+                self.chain_of_cell_ids.resize(self.ncells_in_chain, 0);
+                self.cell_exit_intersects
+                    .resize_with(self.ncells_in_chain, Intersect::default);
+                self.len_chain_ptrs = self.ncells_in_chain;
+                return Ok(0);
+            } else if let Some(neigh_idx) = simplices[self.isimplex].neigh[exit_fi] {
+                self.entry_face_index =
+                    simplices[neigh_idx].get_new_entry_face_index(self.isimplex)?;
+                self.isimplex = neigh_idx;
+                status = self.build_ray_cell_chain(x, dir, rtp, simplices)?;
+            } else {
+                return Err(RTCError::NotFound);
+            };
+
+            i += 1;
+        }
+
+        Ok(status)
+    }
+}
+
 /// NOTE: it is assumed that `vertex[i]` is opposite the face that abuts with
 /// * `neigh[i]` for all `i`.
 #[derive(Debug, Default)]
@@ -103,6 +207,53 @@ pub struct Simplex {
     pub vertex: UVector,
     pub centres: RVector,
     pub neigh: Vec<Option<usize>>, // use index, not reference
+}
+
+impl Simplex {
+    /// Given a simplex dc and the face index (in the range {0...numDims}) fi,
+    /// this returns the desired information about that face. Note that the ordering of
+    /// the elements of face.r[] is the same as the ordering of the vertices of the
+    /// simplex, dc[].vertx[]; just the vertex fi is omitted.
+    ///
+    /// Note that the element 'centre' of the faceType struct is mean to contain the
+    /// spatial coordinates of the centre of the simplex, not of the face. This is
+    /// designed to facilitate orientation of the face and thus to help determine
+    /// whether rays which cross it are entering or exiting the simplex.
+    fn extract_face(&self, fi: usize, vertex_coords: &RVector) -> Face {
+        let num_faces = N_DIMS + 1;
+        let mut face = Face::default();
+        let mut vvi = 0;
+        for vi in 0..num_faces {
+            if vi != fi {
+                let gi = self.vertex[vi];
+                for di in 0..N_DIMS {
+                    face.r[vvi][di] = vertex_coords[N_DIMS * gi + di];
+                }
+                vvi += 1;
+            }
+        }
+        for di in 0..N_DIMS {
+            face.simplex_centres[di] = self.centres[di];
+        }
+        face
+    }
+
+    /// Finds the index of the old cell in the face list of the new cell.
+    fn get_new_entry_face_index(&self, dci: usize) -> Result<usize, RTCError> {
+        let num_faces = N_DIMS + 1;
+        self.neigh
+            .iter()
+            .take(num_faces)
+            .enumerate()
+            .find_map(|(i, &neigh_idx)| {
+                if neigh_idx == Some(dci) {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .ok_or(RTCError::NotFound)
+    }
 }
 
 /// This struct is meant to record all relevant information about the
@@ -140,6 +291,209 @@ pub struct Face {
     /// `simplex_centres` is a convenience pointer array which gives
     /// the location of the geometric centres of the simplexes.
     pub simplex_centres: RVector,
+}
+
+impl Face {
+    /// Each of the faces of a polytope in N spatial dimensions is itself a polytope in
+    /// N-1 dimensions. Each face can therefore be represented via the coordinates of
+    /// its vertices expressed in an (N-1)-dimensional frame oriented so as to be
+    /// parallel to the face. The function of the present routine is to perform this
+    /// decomposition and to return both the (N-1)-dimensional frame (specified via the
+    /// coordinates in N dimensions of its N-1 basis vectors) and the coordinates in it
+    /// of each of the M face vertices. (If the face is simplicial, M==N.)
+    ///
+    /// The calling routine should call freeFacePlusBasis() after it is finished with
+    /// the returned object.
+    ///
+    /// Note that numVertices (a.k.a. M) is expected to be >= numDims (a.k.a. N). The
+    /// thing would not make much sense otherwise.
+    fn basis(&self, nvertices: usize) -> FaceBasis {
+        let mut vs = vec![RVector::zeros(nvertices); nvertices - 1];
+        let mut facebasis = FaceBasis::new();
+        for di in 0..N_DIMS {
+            facebasis.origin[di] = self.r[0][di];
+        }
+        for (vi, vsi) in vs.iter_mut().enumerate().take(nvertices - 1) {
+            for di in 0..N_DIMS {
+                vsi[di] = self.r[vi + 1][di] - self.r[0][di];
+            }
+        }
+        for (i, _) in vs.iter().enumerate().take(N_DIMS - 1) {
+            for di in 0..N_DIMS {
+                facebasis.axes[i][di] = vs[i][di];
+            }
+            for j in 0..i {
+                let mut dotval = 0.0;
+                for di in 0..N_DIMS {
+                    dotval += facebasis.axes[i][di] * facebasis.axes[j][di];
+                }
+                for di in 0..N_DIMS {
+                    facebasis.axes[i][di] -= dotval * facebasis.axes[j][di];
+                }
+            }
+            let mut norm = 0.0;
+            for di in 0..N_DIMS {
+                norm += facebasis.axes[i][di] * facebasis.axes[i][di];
+            }
+            norm = 1.0 / norm.sqrt();
+            for di in 0..N_DIMS {
+                facebasis.axes[i][di] *= norm;
+            }
+        }
+
+        for ddi in 0..N_DIMS - 1 {
+            facebasis.r[0][ddi] = 0.0;
+        }
+        for vi in 1..nvertices {
+            for ddi in 0..N_DIMS - 1 {
+                let mut dotval = 0.0;
+                for di in 0..N_DIMS {
+                    dotval += vs[vi - 1][di] * facebasis.axes[ddi][di];
+                }
+                facebasis.r[vi][ddi] = dotval;
+            }
+        }
+        facebasis
+    }
+
+    fn intersect_line_with_face(&self, x: &RVector, dir: &RVector) -> Result<Intersect, RTCError> {
+        let eps_inv = 1.0 / cc::CITRUS_RT_EPS;
+        let mut vs = RMatrix::zeros((N_DIMS - 1, N_DIMS));
+        let mut norm = RVector::zeros(N_DIMS);
+        let mut px_in_face = RVector::zeros(N_DIMS - 1);
+        let mut t_mat = vec![RVector::zeros(N_DIMS - 1); N_DIMS - 1];
+        let mut b_vec = RVector::zeros(N_DIMS - 1);
+        let mut intersect = Intersect::default();
+
+        for vi in 0..(N_DIMS - 1) {
+            for di in 0..N_DIMS {
+                vs[[vi, di]] = self.r[vi + 1][di] - self.r[0][di];
+            }
+        }
+        if N_DIMS == 2 {
+            norm[0] = -vs[[0, 1]];
+            norm[1] = vs[[0, 0]];
+        } else if N_DIMS == 3 {
+            // Calculate norm via cross product.
+            for di in 0..N_DIMS {
+                let j = (di + 1) % N_DIMS;
+                let k = (di + 2) % N_DIMS;
+                norm[di] = vs[[0, j]] * vs[[1, k]] - vs[[0, k]] * vs[[1, j]];
+            }
+        } else {
+            // Calculate norm via SVD
+            let svd_res = vs.svd(false, true).map_err(|_| RTCError::SVDFail)?;
+            let svs = svd_res.1;
+            let svv = svd_res.2.ok_or(RTCError::SVDFail)?;
+
+            let ci = 0;
+            let mut ci_of_max = ci;
+            let mut max_singular_value = svs[ci];
+            for ci in 1..N_DIMS {
+                if svs[ci] > max_singular_value {
+                    ci_of_max = ci;
+                    max_singular_value = svs[ci];
+                }
+            }
+            let mut ci_of_min: isize = -1;
+            for ci in 0..N_DIMS {
+                if ci == ci_of_max {
+                    continue;
+                }
+                let singular_value = svs[ci];
+                if singular_value * eps_inv < max_singular_value {
+                    if ci_of_min >= 0 {
+                        return Err(RTCError::NonSpan);
+                    }
+                    ci_of_min = ci as isize;
+                }
+            }
+            for di in 0..N_DIMS {
+                norm[di] = svv[[di, ci_of_min as usize]];
+            }
+        }
+
+        let mut test_sum_for_clockwise = 0.0;
+        for di in 0..N_DIMS {
+            test_sum_for_clockwise += norm[di] * (self.r[0][di] - self.simplex_centres[di]);
+        }
+        if test_sum_for_clockwise < 0.0 {
+            norm *= -1.0;
+        }
+
+        let norm_dot_dx = (&norm * dir).sum();
+        intersect.orientation = match norm_dot_dx {
+            x if x > 0.0 => Orientation::ExitFace,
+            x if x < 0.0 => Orientation::EntryFace,
+            _ => return Ok(intersect),
+        };
+
+        let mut numerator = 0.0;
+        for di in 0..N_DIMS {
+            numerator += norm[di] * (self.r[0][di] - x[di]);
+        }
+        intersect.dist = numerator / norm_dot_dx;
+        let face_plus_basis = self.basis(N_DIMS);
+        for i in 0..N_DIMS - 1 {
+            px_in_face[i] = 0.0;
+            for di in 0..N_DIMS {
+                px_in_face[i] += (x[di] + intersect.dist * dir[di] - face_plus_basis.origin[di])
+                    * face_plus_basis.axes[i][di];
+            }
+        }
+
+        if N_DIMS == 2 || N_DIMS == 3 {
+            for i in 0..N_DIMS - 1 {
+                for j in 0..N_DIMS - 1 {
+                    t_mat[i][j] = face_plus_basis.r[j + 1][i] - face_plus_basis.r[0][i];
+                    b_vec[i] = px_in_face[i] - face_plus_basis.r[0][i];
+                }
+            }
+            if N_DIMS == 2 {
+                intersect.bary[1] = b_vec[0] / t_mat[0][0];
+            } else {
+                let det = t_mat[0][0] * t_mat[1][1] - t_mat[0][1] * t_mat[1][0];
+                intersect.bary[1] = (t_mat[1][1] * b_vec[0] - t_mat[0][1] * b_vec[1]) / det;
+                intersect.bary[2] = (-t_mat[1][0] * b_vec[0] + t_mat[0][0] * b_vec[1]) / det;
+            }
+        } else {
+            let mut t = RMatrix::zeros((N_DIMS - 1, N_DIMS - 1));
+            let mut b = RVector::zeros(N_DIMS - 1);
+            for i in 0..N_DIMS - 1 {
+                for j in 0..N_DIMS - 1 {
+                    t[[i, j]] = face_plus_basis.r[j + 1][i] - face_plus_basis.r[0][i];
+                }
+                b[i] = px_in_face[i] - face_plus_basis.r[0][i];
+            }
+            let x = t.solve(&b).map_err(|_| RTCError::SolverFail)?;
+
+            for i in 0..N_DIMS - 1 {
+                intersect.bary[i + 1] = x[i];
+            }
+        }
+
+        intersect.bary[0] = 1.0;
+        for i in 1..N_DIMS {
+            intersect.bary[0] -= intersect.bary[i];
+        }
+        let di = 0;
+        if intersect.bary[di] < 0.5 {
+            intersect.coll_par = intersect.bary[di];
+        } else {
+            intersect.coll_par = 1.0 - intersect.bary[di];
+        }
+        for di in 1..N_DIMS {
+            if intersect.bary[di] < 0.5 {
+                if intersect.bary[di] < intersect.coll_par {
+                    intersect.coll_par = intersect.bary[di];
+                }
+            } else if 1.0 - intersect.bary[di] < intersect.coll_par {
+                intersect.coll_par = 1.0 - intersect.bary[di];
+            }
+        }
+
+        Ok(intersect)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -235,367 +589,6 @@ struct InterCellKey {
     fi_entered_cell: i32,
 }
 
-/// Given a simplex dc and the face index (in the range {0...numDims}) fi,
-/// this returns the desired information about that face. Note that the ordering of
-/// the elements of face.r[] is the same as the ordering of the vertices of the
-/// simplex, dc[].vertx[]; just the vertex fi is omitted.
-///
-/// Note that the element 'centre' of the faceType struct is mean to contain the
-/// spatial coordinates of the centre of the simplex, not of the face. This is
-/// designed to facilitate orientation of the face and thus to help determine
-/// whether rays which cross it are entering or exiting the simplex.
-fn extract_face(fi: usize, dc: &[Simplex], dci: usize, vertex_coords: &RVector) -> Face {
-    let num_faces = N_DIMS + 1;
-    let mut face = Face::default();
-    let mut vvi = 0;
-    for vi in 0..num_faces {
-        if vi != fi {
-            let gi = dc[dci].vertex[vi];
-            for di in 0..N_DIMS {
-                face.r[vvi][di] = vertex_coords[N_DIMS * gi + di];
-            }
-            vvi += 1;
-        }
-    }
-    for di in 0..N_DIMS {
-        face.simplex_centres[di] = dc[dci].centres[di];
-    }
-    face
-}
-
-/// Finds the index of the old cell in the face list of the new cell.
-fn get_new_entry_face_index(new_cell: &Simplex, dci: usize) -> Result<usize, RTCError> {
-    let num_faces = N_DIMS + 1;
-    new_cell
-        .neigh
-        .iter()
-        .take(num_faces)
-        .enumerate()
-        .find_map(|(i, &neigh_idx)| {
-            if neigh_idx == Some(dci) {
-                Some(i)
-            } else {
-                None
-            }
-        })
-        .ok_or(RTCError::NotFound)
-}
-
-/// Each of the faces of a polytope in N spatial dimensions is itself a polytope in
-/// N-1 dimensions. Each face can therefore be represented via the coordinates of
-/// its vertices expressed in an (N-1)-dimensional frame oriented so as to be
-/// parallel to the face. The function of the present routine is to perform this
-/// decomposition and to return both the (N-1)-dimensional frame (specified via the
-/// coordinates in N dimensions of its N-1 basis vectors) and the coordinates in it
-/// of each of the M face vertices. (If the face is simplicial, M==N.)
-///
-/// The calling routine should call freeFacePlusBasis() after it is finished with
-/// the returned object.
-///
-/// Note that numVertices (a.k.a. M) is expected to be >= numDims (a.k.a. N). The
-/// thing would not make much sense otherwise.
-fn calc_face_in_nminus(nvertices: usize, face: &Face) -> FaceBasis {
-    let mut vs = vec![RVector::zeros(nvertices); nvertices - 1];
-    let mut facebasis = FaceBasis::new();
-    for di in 0..N_DIMS {
-        facebasis.origin[di] = face.r[0][di];
-    }
-    for (vi, vsi) in vs.iter_mut().enumerate().take(nvertices - 1) {
-        for di in 0..N_DIMS {
-            vsi[di] = face.r[vi + 1][di] - face.r[0][di];
-        }
-    }
-    for (i, _) in vs.iter().enumerate().take(N_DIMS - 1) {
-        for di in 0..N_DIMS {
-            facebasis.axes[i][di] = vs[i][di];
-        }
-        for j in 0..i {
-            let mut dotval = 0.0;
-            for di in 0..N_DIMS {
-                dotval += facebasis.axes[i][di] * facebasis.axes[j][di];
-            }
-            for di in 0..N_DIMS {
-                facebasis.axes[i][di] -= dotval * facebasis.axes[j][di];
-            }
-        }
-        let mut norm = 0.0;
-        for di in 0..N_DIMS {
-            norm += facebasis.axes[i][di] * facebasis.axes[i][di];
-        }
-        norm = 1.0 / norm.sqrt();
-        for di in 0..N_DIMS {
-            facebasis.axes[i][di] *= norm;
-        }
-    }
-
-    for ddi in 0..N_DIMS - 1 {
-        facebasis.r[0][ddi] = 0.0;
-    }
-    for vi in 1..nvertices {
-        for ddi in 0..N_DIMS - 1 {
-            let mut dotval = 0.0;
-            for di in 0..N_DIMS {
-                dotval += vs[vi - 1][di] * facebasis.axes[ddi][di];
-            }
-            facebasis.r[vi][ddi] = dotval;
-        }
-    }
-    facebasis
-}
-
-fn intersect_line_with_face(
-    face: &Face,
-    x: &RVector,
-    dir: &RVector,
-) -> Result<Intersect, RTCError> {
-    let eps_inv = 1.0 / cc::CITRUS_RT_EPS;
-    let mut vs = RMatrix::zeros((N_DIMS - 1, N_DIMS));
-    let mut norm = RVector::zeros(N_DIMS);
-    let mut px_in_face = RVector::zeros(N_DIMS - 1);
-    let mut t_mat = vec![RVector::zeros(N_DIMS - 1); N_DIMS - 1];
-    let mut b_vec = RVector::zeros(N_DIMS - 1);
-    let mut intersect = Intersect::default();
-
-    for vi in 0..(N_DIMS - 1) {
-        for di in 0..N_DIMS {
-            vs[[vi, di]] = face.r[vi + 1][di] - face.r[0][di];
-        }
-    }
-    if N_DIMS == 2 {
-        norm[0] = -vs[[0, 1]];
-        norm[1] = vs[[0, 0]];
-    } else if N_DIMS == 3 {
-        // Calculate norm via cross product.
-        for di in 0..N_DIMS {
-            let j = (di + 1) % N_DIMS;
-            let k = (di + 2) % N_DIMS;
-            norm[di] = vs[[0, j]] * vs[[1, k]] - vs[[0, k]] * vs[[1, j]];
-        }
-    } else {
-        // Calculate norm via SVD
-        let svd_res = vs.svd(false, true).map_err(|_| RTCError::SVDFail)?;
-        let svs = svd_res.1;
-        let svv = svd_res.2.ok_or(RTCError::SVDFail)?;
-
-        let ci = 0;
-        let mut ci_of_max = ci;
-        let mut max_singular_value = svs[ci];
-        for ci in 1..N_DIMS {
-            if svs[ci] > max_singular_value {
-                ci_of_max = ci;
-                max_singular_value = svs[ci];
-            }
-        }
-        let mut ci_of_min: isize = -1;
-        for ci in 0..N_DIMS {
-            if ci == ci_of_max {
-                continue;
-            }
-            let singular_value = svs[ci];
-            if singular_value * eps_inv < max_singular_value {
-                if ci_of_min >= 0 {
-                    return Err(RTCError::NonSpan);
-                }
-                ci_of_min = ci as isize;
-            }
-        }
-        for di in 0..N_DIMS {
-            norm[di] = svv[[di, ci_of_min as usize]];
-        }
-    }
-
-    let mut test_sum_for_clockwise = 0.0;
-    for di in 0..N_DIMS {
-        test_sum_for_clockwise += norm[di] * (face.r[0][di] - face.simplex_centres[di]);
-    }
-    if test_sum_for_clockwise < 0.0 {
-        norm *= -1.0;
-    }
-
-    let norm_dot_dx = (&norm * dir).sum();
-    intersect.orientation = match norm_dot_dx {
-        x if x > 0.0 => Orientation::ExitFace,
-        x if x < 0.0 => Orientation::EntryFace,
-        _ => return Ok(intersect),
-    };
-
-    let mut numerator = 0.0;
-    for di in 0..N_DIMS {
-        numerator += norm[di] * (face.r[0][di] - x[di]);
-    }
-    intersect.dist = numerator / norm_dot_dx;
-    let face_plus_basis = calc_face_in_nminus(N_DIMS, face);
-    for i in 0..N_DIMS - 1 {
-        px_in_face[i] = 0.0;
-        for di in 0..N_DIMS {
-            px_in_face[i] += (x[di] + intersect.dist * dir[di] - face_plus_basis.origin[di])
-                * face_plus_basis.axes[i][di];
-        }
-    }
-
-    if N_DIMS == 2 || N_DIMS == 3 {
-        for i in 0..N_DIMS - 1 {
-            for j in 0..N_DIMS - 1 {
-                t_mat[i][j] = face_plus_basis.r[j + 1][i] - face_plus_basis.r[0][i];
-                b_vec[i] = px_in_face[i] - face_plus_basis.r[0][i];
-            }
-        }
-        if N_DIMS == 2 {
-            intersect.bary[1] = b_vec[0] / t_mat[0][0];
-        } else {
-            let det = t_mat[0][0] * t_mat[1][1] - t_mat[0][1] * t_mat[1][0];
-            intersect.bary[1] = (t_mat[1][1] * b_vec[0] - t_mat[0][1] * b_vec[1]) / det;
-            intersect.bary[2] = (-t_mat[1][0] * b_vec[0] + t_mat[0][0] * b_vec[1]) / det;
-        }
-    } else {
-        let mut t = RMatrix::zeros((N_DIMS - 1, N_DIMS - 1));
-        let mut b = RVector::zeros(N_DIMS - 1);
-        for i in 0..N_DIMS - 1 {
-            for j in 0..N_DIMS - 1 {
-                t[[i, j]] = face_plus_basis.r[j + 1][i] - face_plus_basis.r[0][i];
-            }
-            b[i] = px_in_face[i] - face_plus_basis.r[0][i];
-        }
-        let x = t.solve(&b).map_err(|_| RTCError::SolverFail)?;
-
-        for i in 0..N_DIMS - 1 {
-            intersect.bary[i + 1] = x[i];
-        }
-    }
-
-    intersect.bary[0] = 1.0;
-    for i in 1..N_DIMS {
-        intersect.bary[0] -= intersect.bary[i];
-    }
-    let di = 0;
-    if intersect.bary[di] < 0.5 {
-        intersect.coll_par = intersect.bary[di];
-    } else {
-        intersect.coll_par = 1.0 - intersect.bary[di];
-    }
-    for di in 1..N_DIMS {
-        if intersect.bary[di] < 0.5 {
-            if intersect.bary[di] < intersect.coll_par {
-                intersect.coll_par = intersect.bary[di];
-            }
-        } else if 1.0 - intersect.bary[di] < intersect.coll_par {
-            intersect.coll_par = 1.0 - intersect.bary[di];
-        }
-    }
-
-    Ok(intersect)
-}
-
-fn build_ray_cell_chain(
-    cntxt: &mut ChainContext,
-    x: &RVector,
-    dir: &RVector,
-    rtp: &RTPreparation,
-    simplices: &[Simplex],
-) -> Result<i32, RTCError> {
-    const NUM_FACES: usize = N_DIMS + 1;
-
-    let buffer_size = 1024;
-    let mut intersects = Vec::with_capacity(NUM_FACES);
-    let mut good_exit_fis = Vec::new();
-    let mut marginal_exit_fis = Vec::new();
-
-    let mut following_single_chain = true;
-    while following_single_chain {
-        cntxt.cell_visited[cntxt.isimplex] = true;
-        if cntxt.ncells_in_chain >= cntxt.len_chain_ptrs {
-            cntxt.len_chain_ptrs += buffer_size;
-            cntxt.chain_of_cell_ids.resize(cntxt.len_chain_ptrs, 0);
-            cntxt
-                .cell_exit_intersects
-                .resize_with(cntxt.len_chain_ptrs, Intersect::default);
-        }
-        (cntxt.chain_of_cell_ids)[cntxt.ncells_in_chain] = cntxt.isimplex;
-        for fi in 0..NUM_FACES {
-            if fi != cntxt.entry_face_index
-                && (simplices[cntxt.isimplex].neigh[fi].is_none()
-                    || simplices[cntxt.isimplex].neigh[fi]
-                        .is_some_and(|n| !(cntxt.cell_visited)[n]))
-            {
-                let face = extract_face(
-                    fi,
-                    rtp.simplices.as_slice(),
-                    cntxt.isimplex,
-                    &rtp.vertex_coords,
-                );
-                let mut intersect = intersect_line_with_face(&face, x, dir)?;
-                intersect.fi = fi;
-                if intersect.orientation == Orientation::ExitFace {
-                    if intersect.coll_par - cc::CITRUS_RT_EPS > 0.0 {
-                        good_exit_fis.push(fi);
-                    } else if intersect.coll_par + cc::CITRUS_RT_EPS > 0.0 {
-                        marginal_exit_fis.push(fi);
-                    }
-                }
-                intersects.push(intersect);
-            }
-        }
-        if good_exit_fis.len() > 1 {
-            return Err(RTCError::MultipleCandidates);
-        } else if good_exit_fis.len() == 1 || marginal_exit_fis.len() == 1 {
-            let exit_fi = if good_exit_fis.len() == 1 {
-                good_exit_fis[0]
-            } else {
-                marginal_exit_fis[0]
-            };
-            (cntxt.cell_exit_intersects)[cntxt.ncells_in_chain] =
-                mem::take(&mut intersects[exit_fi]);
-            cntxt.ncells_in_chain += 1;
-            if simplices[cntxt.isimplex].neigh[exit_fi].is_none() {
-                cntxt.chain_of_cell_ids.resize(cntxt.ncells_in_chain, 0);
-                cntxt
-                    .cell_exit_intersects
-                    .resize_with(cntxt.ncells_in_chain, Intersect::default);
-                cntxt.len_chain_ptrs = cntxt.ncells_in_chain;
-                return Ok(0);
-            } else if let Some(neigh_idx) = simplices[cntxt.isimplex].neigh[exit_fi] {
-                cntxt.entry_face_index =
-                    get_new_entry_face_index(&simplices[neigh_idx], cntxt.isimplex)?;
-                cntxt.isimplex = neigh_idx;
-            } else {
-                return Err(RTCError::NotFound);
-            };
-        } else {
-            following_single_chain = false;
-        }
-    }
-
-    if marginal_exit_fis.is_empty() {
-        return Ok(3);
-    }
-
-    let mut i = 0;
-    let mut status = 4;
-    while i < marginal_exit_fis.len() && status > 0 {
-        let exit_fi = marginal_exit_fis[i];
-        (cntxt.cell_exit_intersects)[cntxt.ncells_in_chain] = mem::take(&mut intersects[exit_fi]);
-        if simplices[cntxt.isimplex].neigh[exit_fi].is_none() {
-            cntxt.chain_of_cell_ids.resize(cntxt.ncells_in_chain, 0);
-            cntxt
-                .cell_exit_intersects
-                .resize_with(cntxt.ncells_in_chain, Intersect::default);
-            cntxt.len_chain_ptrs = cntxt.ncells_in_chain;
-            return Ok(0);
-        } else if let Some(neigh_idx) = simplices[cntxt.isimplex].neigh[exit_fi] {
-            cntxt.entry_face_index =
-                get_new_entry_face_index(&simplices[neigh_idx], cntxt.isimplex)?;
-            cntxt.isimplex = neigh_idx;
-            status = build_ray_cell_chain(cntxt, x, dir, rtp, simplices)?;
-        } else {
-            return Err(RTCError::NotFound);
-        };
-
-        i += 1;
-    }
-
-    Ok(status)
-}
-
 fn follow_ray_through_cells(
     ndims: usize,
     x: &RVector,
@@ -613,8 +606,8 @@ fn follow_ray_through_cells(
     for (isimplex, simplex) in rtp.simplices.iter().enumerate() {
         for fi in 0..num_faces {
             if simplex.neigh[fi].is_none() {
-                let face = extract_face(fi, rtp.simplices.as_slice(), isimplex, &rtp.vertex_coords);
-                let mut intersect = intersect_line_with_face(&face, x, dir)?;
+                let face = rtp.simplices[isimplex].extract_face(fi, &rtp.vertex_coords);
+                let mut intersect = face.intersect_line_with_face(x, dir)?;
                 intersect.fi = fi;
                 if intersect.orientation == Orientation::EntryFace
                     && intersect.coll_par + cc::CITRUS_RT_EPS > 0.0
@@ -649,7 +642,7 @@ fn follow_ray_through_cells(
         cell_exit_intersects: Vec::with_capacity(1024),
     };
     while i < num_entry_faces && status > 0 {
-        status = build_ray_cell_chain(&mut cntxt, x, dir, rtp, rtp.simplices.as_slice())?;
+        status = cntxt.build_ray_cell_chain(x, dir, rtp, rtp.simplices.as_slice())?;
         i += 1;
     }
 

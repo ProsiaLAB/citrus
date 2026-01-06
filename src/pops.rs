@@ -1,4 +1,4 @@
-use extensions::types::RVector;
+use prosia_extensions::types::RVector;
 
 use crate::collparts::Rates;
 use crate::lines::ContinuumLine;

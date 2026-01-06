@@ -1,4 +1,4 @@
-use extensions::types::RVector;
+use prosia_extensions::types::RVector;
 
 pub struct GridPointData {
     pub jbar: RVector,

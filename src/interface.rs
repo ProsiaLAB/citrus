@@ -1,7 +1,7 @@
 //! Temporary module to define user-facing functions
 //! which serve as the interface to the `citrus` engine.
 
-use extensions::types::RVector;
+use prosia_extensions::types::RVector;
 
 use crate::constants as cc;
 

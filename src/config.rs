@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
-use extensions::types::{RMatrix, RVector};
+use anyhow::bail;
 use ndarray::array;
+use prosia_extensions::types::{RMatrix, RVector};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use serde::Deserialize; // StdRng is a good general-purpose algorithm
+use serde::Deserialize;
 
 use crate::collparts::MolData;
 use crate::constants as cc;
@@ -162,7 +162,7 @@ pub enum RayTraceAlgorithm {
     Modern,
 }
 
-/// The `Image` struct represents the configuration for an image to be generated.
+/// The [`Image`] struct represents the configuration for an image to be generated.
 /// For the field `units`, we have the following mapping:
 /// - "Kelvin"
 /// - "Jansky per pixel"
@@ -598,7 +598,9 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
                 }
             } else if img.freq < 0.0 {
                 // User has not set `trans`, nor `freq`
-                bail!("You must either set `trans` or `freq` for a line image (and optionally the `mol_i`");
+                bail!(
+                    "You must either set `trans` or `freq` for a line image (and optionally the `mol_i`"
+                );
             } // else user has set `freq`
             img.do_line = true;
         } // End of check for line or continuum image
