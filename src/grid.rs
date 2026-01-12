@@ -11,9 +11,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
 use crate::config::Parameters;
-use crate::constants as cc;
-use crate::defaults::{self, N_DIMS};
-use crate::engine::DataStage;
+use crate::constants::{self as cc, N_DIMS};
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
 use crate::utils;
@@ -127,7 +125,7 @@ pub fn set_default_grid(num_points: usize, num_species: usize) -> Vec<Grid> {
 }
 
 pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
-    let mut rand_gen = if defaults::FIX_RANDOM_SEEDS {
+    let mut rand_gen = if true {
         // Use fixed seed for reproducibility
         // Note: SeedableRng::seed_from_u64 takes a u64 seed
         StdRng::seed_from_u64(6611304)
@@ -269,7 +267,6 @@ pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
 }
 
 pub fn read_or_build_grid(par: &mut Parameters) -> Result<Vec<Grid>> {
-    par.data_flags = DataStage::empty();
     if !par.grid_in_file.is_empty() {
         read_grid_init(par);
     }
@@ -473,7 +470,9 @@ pub fn delaunay(
                                     }
                                 }
                                 None => {
-                                    bail!("`qhull` failed silently. A smoother `grid_density` might help.");
+                                    bail!(
+                                        "`qhull` failed silently. A smoother `grid_density` might help."
+                                    );
                                 }
                             }
                         }
@@ -640,7 +639,7 @@ fn dist_calc(gp: &mut [Grid], num_points: usize) {
             }
         }
 
-        gp_point.nphot = defaults::RAYS_PER_POINT;
+        // gp_point.nphot = defaults::RAYS_PER_POINT;
     }
 }
 

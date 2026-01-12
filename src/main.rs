@@ -18,24 +18,8 @@ fn main() -> Result<()> {
 
     let path = &args[0];
 
-    // Try to get the absolute path and handle errors properly
-    let path = match fs::canonicalize(path) {
-        Ok(p) => p, // Successfully resolved to an absolute path
-        Err(e) => {
-            return Err(e.into());
-        }
-    };
-
-    // Ensure the path exists after resolving it
-    if !path.exists() {
-        bail!("The path does not exist.");
-    }
-
     // Load the TOML file
-    let input_config = load_config(
-        path.to_str()
-            .ok_or_else(|| anyhow!("Error: The canonicalized path is not valid UTF-8."))?,
-    )?;
+    let input_config = load_config(path).expect("Failed to load config");
 
     dbg!("Loaded config: {:?}", &input_config);
 

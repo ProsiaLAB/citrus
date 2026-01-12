@@ -104,3 +104,5 @@ pub const ARCSEC_TO_RAD: f64 = std::f64::consts::PI / 180.0 / 3600.0;
 /// Used to prevent numerical errors such as division by zero
 pub const CITRUS_GLOBAL_EPS: f64 = 1e-30;
 pub const CITRUS_RT_EPS: f64 = 1e-6;
+
+pub const N_DIMS: usize = 3;

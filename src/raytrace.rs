@@ -14,11 +14,10 @@ use crate::collparts::MolData;
 use crate::config::RayTraceAlgorithm;
 use crate::config::{Image, Parameters};
 use crate::constants as cc;
-use crate::defaults::N_DIMS;
+use crate::constants::N_DIMS;
 use crate::grid::DelaunayResult;
 use crate::grid::delaunay;
 use crate::grid::{Cell, Grid};
-use crate::interface::{gas_to_dust_ratio, velocity};
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
 use crate::source::{source_fn_cont, source_fn_line, source_fn_polarized};
@@ -679,7 +678,7 @@ fn calc_grid_cont_dust_opacity(
     let freqs = RVector::from_elem(1, 0.0);
 
     for gpi in gp.iter_mut().take(par.ncell) {
-        let gas_to_dust_ratio = gas_to_dust_ratio();
+        let gas_to_dust_ratio: f64 = todo!();
         let t_kelvin = get_dust_temp(&gpi.t);
         let dtg = get_dtg(par, &gpi.dens.view(), gas_to_dust_ratio);
         calc_dust_data(
@@ -879,8 +878,8 @@ fn trace_ray(
         } else if img.do_line && par.use_vel_func_in_raytrace {
             for i in 0..N_STEPS_THROUGH_CELL {
                 let d = i as f64 * ds * N_STEPS_INV;
-                let vel = velocity(x[0] + (dx[0] * d), x[1] + (dx[1] * d), x[2] + (dx[2] * d));
-                projection_velocities[i] = dx.dot(&vel);
+                // let vel = velocity(x[0] + (dx[0] * d), x[1] + (dx[1] * d), x[2] + (dx[2] * d));
+                // projection_velocities[i] = dx.dot(&vel);
             }
             let mut cont_jnu = 0.0;
             let mut cont_alpha = 0.0;
@@ -1465,8 +1464,8 @@ fn trace_ray_smooth(
                         (si as f64 + 1.0) * (N_SEGMENTS_INV),
                     );
                 } else {
-                    let vel = velocity(gips[2].x[0], gips[2].x[1], gips[2].x[2]);
-                    projection_vel_ray = dir.dot(&vel);
+                    // let vel = velocity(gips[2].x[0], gips[2].x[1], gips[2].x[2]);
+                    // projection_vel_ray = dir.dot(&vel);
                 }
             }
             let cont_jnu = 0.0;

@@ -13,7 +13,8 @@ nmol_weights = [1.0]
 collisional_partner_names = ["H2"]
 collisional_partner_mol_weights = [2.0159]
 
-[image-01]
+# One can specify multiple images by just adding another [[image]] section
+[[images]]
 nchan = 61
 vel_res = 500.0
 trans = 3
@@ -26,5 +27,3 @@ inclination = 0.0
 position_angle = 0.0
 unit = "kelvin"
 filename = "image_01.fits"
-
-# Once can add more images by adding more sections like [image-##]

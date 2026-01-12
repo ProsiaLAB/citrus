@@ -13,12 +13,11 @@ use serde::Deserialize;
 
 use crate::collparts::MolData;
 use crate::constants as cc;
-use crate::defaults::{self, N_DIMS};
-use crate::engine::DataStage;
+use crate::constants::N_DIMS;
 use crate::lines::Spec;
 
 /// A container for all the images in the configuration file
-type Images = HashMap<String, Image>;
+type Images = Vec<Image>;
 type MolDataVec = Vec<MolData>;
 
 #[derive(Deserialize, Debug, Default)]
@@ -28,7 +27,7 @@ pub struct Parameters {
     pub radius: f64,
     #[serde(default)]
     pub min_scale: f64,
-    #[serde(default = "defaults::cmb_temp")]
+    #[serde(default)]
     pub cmb_temp: f64,
     #[serde(default)]
     pub sink_points: usize,
@@ -48,7 +47,7 @@ pub struct Parameters {
     pub init_lte: bool,
     #[serde(default)]
     pub polarization: bool,
-    #[serde(default = "defaults::nthreads")]
+    #[serde(default)]
     pub nthreads: usize,
     #[serde(default)]
     pub nsolve_iters: usize,
@@ -70,26 +69,26 @@ pub struct Parameters {
     pub reset_rng: bool,
     #[serde(default)]
     pub do_solve_rte: bool,
-    #[serde(default = "defaults::nmol_weights")]
+    #[serde(default)]
     pub nmol_weights: Vec<f64>,
-    #[serde(default = "defaults::dust_weights")]
+    #[serde(default)]
     pub dust_weights: Vec<f64>,
-    #[serde(default = "defaults::grid_density_max_locations")]
+    #[serde(default)]
     pub grid_density_max_locations: Vec<[f64; 3]>,
-    #[serde(default = "defaults::grid_density_max_values")]
+    #[serde(default)]
     pub grid_density_max_values: Vec<f64>,
-    #[serde(default = "defaults::collisional_partner_mol_weights")]
+    #[serde(default)]
     pub collisional_partner_mol_weights: Vec<f64>,
     /// This list acts as a link between the `N` density
     /// function returns (I'm using here `N` as shorthand for `num_densities`) and the `M`
     /// collision partner ID integers found in the moldatfiles. This allows us to
     /// associate density functions with the collision partner transition rates provided
     /// in the moldatfiles.
-    #[serde(default = "defaults::collisional_partner_ids")]
+    #[serde(default)]
     pub collisional_partner_ids: Vec<usize>,
-    #[serde(default = "defaults::grid_data_files")]
+    #[serde(default)]
     pub grid_data_files: Option<Vec<String>>,
-    #[serde(default = "defaults::mol_data_files")]
+    #[serde(default)]
     pub mol_data_files: Vec<String>,
     /// Essentially this has only cosmetic importance
     /// since it has no effect on the functioning of LIME, only on the names of the
@@ -97,9 +96,9 @@ pub struct Parameters {
     /// the user who has provided transition rates for a non-LAMDA collision species in
     /// their moldatfile that they are actually getting these values and not some
     /// mysterious reversion to LAMDA.
-    #[serde(default = "defaults::collisional_partner_names")]
+    #[serde(default)]
     pub collisional_partner_names: Vec<String>,
-    #[serde(default = "defaults::grid_out_files")]
+    #[serde(default)]
     pub grid_out_files: Vec<String>,
     #[serde(default)]
     pub collisional_partner_user_set_flags: isize,
@@ -130,8 +129,6 @@ pub struct Parameters {
     #[serde(default)]
     pub n_cont_images: usize,
     #[serde(default)]
-    pub data_flags: DataStage,
-    #[serde(default)]
     pub n_solve_iters_done: usize,
     #[serde(default)]
     pub do_interpolate_vels: bool,
@@ -144,7 +141,7 @@ pub struct Parameters {
     #[serde(default)]
     pub edge_vels_available: bool,
     #[serde(default)]
-    pub write_grid_at_stage: [bool; defaults::NUM_OF_GRID_STAGES],
+    pub write_grid_at_stage: Vec<bool>,
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -174,17 +171,13 @@ pub enum RayTraceAlgorithm {
 pub struct Image {
     #[serde(default)]
     pub nchan: usize,
-    #[serde(default = "defaults::image_value_i64")]
     pub trans: i64,
     #[serde(default)]
     pub mol_i: usize,
     #[serde(default)]
     pub pixel: Vec<Spec>,
-    #[serde(default = "defaults::image_value_f64")]
     pub vel_res: f64,
-    #[serde(default = "defaults::image_value_f64")]
     pub img_res: f64,
-    #[serde(default = "defaults::image_value_i64")]
     pub pxls: i64,
     #[serde(default)]
     pub unit: Unit,
@@ -192,9 +185,9 @@ pub struct Image {
     pub img_units: Vec<Unit>,
     #[serde(default)]
     pub num_units: i64,
-    #[serde(default = "defaults::image_value_f64")]
+    #[serde(default)]
     pub freq: f64,
-    #[serde(default = "defaults::image_value_f64")]
+    #[serde(default)]
     pub bandwidth: f64,
     #[serde(default)]
     pub filename: String,
@@ -204,13 +197,9 @@ pub struct Image {
     pub theta: f64,
     #[serde(default)]
     pub phi: f64,
-    #[serde(default = "defaults::image_angle")]
     pub inclination: f64,
-    #[serde(default = "defaults::image_angle")]
     pub position_angle: f64,
-    #[serde(default = "defaults::image_angle")]
     pub azimuth: f64,
-    #[serde(default = "defaults::image_value_f64")]
     pub distance: f64,
     #[serde(default)]
     pub rotation_matrix: RMatrix,
@@ -235,17 +224,10 @@ pub enum Unit {
     OpticalDepth,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Config {
     pub parameters: Parameters,
-    pub images: HashMap<String, Image>,
-}
-
-impl Config {
-    fn from_str(toml_content: &str) -> Result<Config> {
-        let (parameters, images) = to_config(toml_content)?;
-        Ok(Config { parameters, images })
-    }
+    pub images: Vec<Image>,
 }
 
 fn to_config(toml_content: &str) -> Result<(Parameters, HashMap<String, Image>)> {
@@ -289,7 +271,8 @@ fn to_config(toml_content: &str) -> Result<(Parameters, HashMap<String, Image>)>
 
 pub fn load_config(path: &str) -> Result<Config> {
     let content = fs::read_to_string(path)?; // Propagate file read errors
-    Config::from_str(&content) // Propagate config parsing errors
+    let config: Config = toml::from_str(&content)?; // Propagate config parsing errors
+    Ok(config)
 }
 
 /// Parse the configuration file
@@ -315,12 +298,12 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
 
     // Some variables to be used later
     let mut r = [0.0; 3];
-    let mut temp_point_density: f64;
+    let mut temp_point_density: f64 = 0.0;
 
     let mut i = 0;
-    while i < defaults::MAX_NUM_HIGH && pars.grid_density_max_values[i] >= 0.0 {
-        i += 1;
-    }
+    // while i < defaults::MAX_NUM_HIGH && pars.grid_density_max_values[i] >= 0.0 {
+    //     i += 1;
+    // }
     pars.num_grid_density_maxima = i as i32;
     pars.ncell = pars.p_intensity + pars.sink_points;
     pars.radius_squ = pars.radius * pars.radius;
@@ -328,7 +311,6 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
     pars.do_pregrid = !pars.pre_grid.is_empty();
     pars.n_solve_iters_done = 0;
     pars.use_abun = true;
-    pars.data_flags = DataStage::empty();
 
     if pars.grid_in_file.is_empty() {
         if pars.radius <= 0.0 {
@@ -400,21 +382,21 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
         pars.grid_density_global_max = 1.0;
 
         // First try `grid_density()` at the origin, where it is often the highest
-        temp_point_density = defaults::grid_density(
-            &mut r,
-            pars.radius_squ,
-            pars.num_densities,
-            pars.grid_density_global_max,
-        );
+        // temp_point_density = defaults::grid_density(
+        //     &mut r,
+        //     pars.radius_squ,
+        //     pars.num_densities,
+        //     pars.grid_density_global_max,
+        // );
 
         // Some sanity checks
-        if temp_point_density.is_infinite() || temp_point_density.is_nan() {
-            eprintln!("There is a singularity in the grid density function.");
-        } else if temp_point_density <= 0.0 {
-            eprintln!("The grid density function is zero at the origin.");
-        } else if temp_point_density >= pars.grid_density_global_max {
-            pars.grid_density_global_max = temp_point_density;
-        }
+        // if temp_point_density.is_infinite() || temp_point_density.is_nan() {
+        //     eprintln!("There is a singularity in the grid density function.");
+        // } else if temp_point_density <= 0.0 {
+        //     eprintln!("The grid density function is zero at the origin.");
+        // } else if temp_point_density >= pars.grid_density_global_max {
+        //     pars.grid_density_global_max = temp_point_density;
+        // }
 
         // Make things work somehow
         if temp_point_density.is_infinite()
@@ -422,12 +404,12 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
             || temp_point_density <= 0.0
         {
             r.iter_mut().take(N_DIMS).for_each(|x| *x = pars.min_scale);
-            temp_point_density = defaults::grid_density(
-                &mut r,
-                pars.radius_squ,
-                pars.num_densities,
-                pars.grid_density_global_max,
-            );
+            // temp_point_density = defaults::grid_density(
+            //     &mut r,
+            //     pars.radius_squ,
+            //     pars.num_densities,
+            //     pars.grid_density_global_max,
+            // );
 
             if !temp_point_density.is_infinite()
                 && !temp_point_density.is_nan()
@@ -436,7 +418,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
                 pars.grid_density_global_max = temp_point_density;
             } else {
                 // Hmm ok, let's try a spread of random locations
-                let mut rand_gen = if defaults::FIX_RANDOM_SEEDS {
+                let mut rand_gen = if true {
                     // Use fixed seed for reproducibility
                     // Note: SeedableRng::seed_from_u64 takes a u64 seed
                     StdRng::seed_from_u64(140978)
@@ -448,17 +430,17 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
                 };
                 println!("Random number generator initialized.");
                 let mut found_good_value = false;
-                for _ in 0..defaults::NUM_RANDOM_DENS {
+                for _ in 0..10 {
                     r.iter_mut().take(N_DIMS).for_each(|x| {
                         // Generate a random f64 in the range [-pars.radius, pars.radius)
                         *x = rand_gen.random_range(-pars.radius..pars.radius);
                     });
-                    temp_point_density = defaults::grid_density(
-                        &mut r,
-                        pars.radius_squ,
-                        pars.num_densities,
-                        pars.grid_density_global_max,
-                    );
+                    // temp_point_density = defaults::grid_density(
+                    //     &mut r,
+                    //     pars.radius_squ,
+                    //     pars.num_densities,
+                    //     pars.grid_density_global_max,
+                    // );
                     if !temp_point_density.is_infinite()
                         && !temp_point_density.is_nan()
                         && temp_point_density > 0.0
@@ -486,11 +468,11 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
         }
     }
 
-    for i in 0..defaults::NUM_OF_GRID_STAGES {
-        if !pars.grid_out_files[i].is_empty() {
-            pars.write_grid_at_stage[i] = true;
-        }
-    }
+    // for i in 0..defaults::NUM_OF_GRID_STAGES {
+    //     if !pars.grid_out_files[i].is_empty() {
+    //         pars.write_grid_at_stage[i] = true;
+    //     }
+    // }
 
     /*
     Now we need to calculate the cutoff value used in `calc_source_fn()`. The issue is
@@ -517,7 +499,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
     pars.num_dims = N_DIMS;
 
     // Allocate pixel space and parse image information
-    for (key, img) in imgs.iter_mut() {
+    for (key, img) in imgs.iter_mut().enumerate() {
         // if img.unit {
         //     img.num_units = 1; // 1 is Jy/pixel
 
@@ -714,7 +696,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
     pars.n_cont_images = 0;
     pars.do_interpolate_vels = false;
 
-    for (_, img) in imgs.iter_mut() {
+    for (_, img) in imgs.iter_mut().enumerate() {
         if img.do_line {
             pars.n_line_images += 1;
         } else {
@@ -768,7 +750,8 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
     }
 
     let mol_data = if pars.n_species > 0 {
-        defaults::mol_data(pars.n_species)
+        // defaults::mol_data(pars.n_species)
+        todo!()
     } else {
         None
     };

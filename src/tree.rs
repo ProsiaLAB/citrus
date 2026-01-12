@@ -1,7 +1,7 @@
 use rand::rngs::StdRng;
 
 use crate::config::Parameters;
-use crate::defaults::N_DIMS;
+use crate::constants::N_DIMS;
 use crate::utils::qrng::Halton;
 
 pub const N_RANDOMS: usize = 10000;
