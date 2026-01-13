@@ -6,6 +6,7 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
 use ndarray::array;
+use prosia_extensions::types::Vec3;
 use prosia_extensions::types::{RMatrix, RVector};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -20,136 +21,218 @@ use crate::lines::Spec;
 type Images = Vec<Image>;
 type MolDataVec = Vec<MolData>;
 
-#[derive(Deserialize, Debug, Default)]
+/// This struct contains all basic settings such as number of grid points,
+/// model radius, input and output filenames, etc. Some of these parameters
+/// always need to be set by the user, while others are optional with preset
+/// default values. There is an exception to this rule, namely when restarting
+/// citrus with previously calculated populations. In that case, none of the
+/// non-optional parameters are required.
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Parameters {
-    #[serde(default)]
+    /// This value sets the outer radius of the computational domain.
+    ///
+    /// # Note
+    /// It should be set large enough to cover the entire spatial extend of the
+    /// model. In particular, if a cylindrical input model is used (e.g., the
+    /// input file for the RATRAN code) one should not use the radius of the
+    /// cylinder but rather the distance from the centre to the corner of the
+    /// (r,z)-plane.
     pub radius: f64,
-    #[serde(default)]
+
+    /// The smallest spatial scale sampled by the code. Structures smaller
+    /// than minScale will not be sampled properly. If one uses spherical
+    /// sampling (see below) this number can also be thought of as the inner
+    /// edge of the grid. This number should not be set smaller than needed,
+    /// because that will cause an undesirably large number of grid points to end up near the
+    /// centre of the model.
     pub min_scale: f64,
-    #[serde(default)]
+
     pub cmb_temp: f64,
-    #[serde(default)]
+
+    /// The sinkPoints are grid points that are distributed randomly at
+    /// [`radius`][Parameters::radius] forming the surface of the model. As a photon from within
+    /// the model reaches a sink point it is said to escape and is not tracked
+    /// any longer. The number of sink points is a user-defined quantity since
+    /// the exact number may affect the resulting image as well as the running
+    /// time of the code. One should choose a number that gives a surface
+    /// density large enough not to cause artifacts in the image and low enough
+    /// not to slow down the gridding too much. Since this is model dependent, a
+    /// global best value cannot be given, but a useful range is between a few
+    /// thousands and about ten thousand.
     pub sink_points: usize,
-    #[serde(default)]
+
+    /// This number is the number of model grid points. The more grid points
+    /// that are used, the longer the code will take to run. Too few points
+    /// however, will cause the model to be under-sampled with the risk of
+    /// getting wrong results. Useful numbers are between a few thousands up to
+    /// about one hundred thousand.
     pub p_intensity: usize,
-    #[serde(default)]
-    pub blend: isize,
-    #[serde(default)]
+    pub enable_line_blending: bool,
     pub ray_trace_algorithm: RayTraceAlgorithm,
-    #[serde(default)]
-    pub sampling_algorithm: isize,
-    #[serde(default)]
-    pub sampling: Sampling,
-    #[serde(default)]
+
+    /// The sampling algorithm used for the model grid.
+    ///
+    /// By default, the [`UniformExact`][SamplingAlgorithm::UniformExact] is used
+    /// which corresponds to default algorithm in newer versions of LIME.
+    pub sampling_algorithm: SamplingAlgorithm,
     pub lte_only: bool,
-    #[serde(default)]
     pub init_lte: bool,
-    #[serde(default)]
     pub polarization: bool,
-    #[serde(default)]
-    pub nthreads: usize,
-    #[serde(default)]
     pub nsolve_iters: usize,
-    #[serde(default)]
     pub output_file: String,
-    #[serde(default)]
     pub binoutput_file: String,
-    #[serde(default)]
     pub grid_file: String,
-    #[serde(default)]
     pub pre_grid: String,
-    #[serde(default)]
-    pub restart: bool,
-    #[serde(default)]
-    pub dust: Option<String>,
-    #[serde(default)]
+    pub dust_file: Option<String>,
     pub grid_in_file: String,
-    #[serde(default)]
     pub reset_rng: bool,
-    #[serde(default)]
     pub do_solve_rte: bool,
-    #[serde(default)]
     pub nmol_weights: Vec<f64>,
-    #[serde(default)]
     pub dust_weights: Vec<f64>,
-    #[serde(default)]
-    pub grid_density_max_locations: Vec<[f64; 3]>,
-    #[serde(default)]
-    pub grid_density_max_values: Vec<f64>,
-    #[serde(default)]
+
     pub collisional_partner_mol_weights: Vec<f64>,
     /// This list acts as a link between the `N` density
     /// function returns (I'm using here `N` as shorthand for `num_densities`) and the `M`
     /// collision partner ID integers found in the moldatfiles. This allows us to
     /// associate density functions with the collision partner transition rates provided
     /// in the moldatfiles.
-    #[serde(default)]
     pub collisional_partner_ids: Vec<usize>,
-    #[serde(default)]
-    pub grid_data_files: Option<Vec<String>>,
-    #[serde(default)]
+    pub g_ir_data_files: Option<Vec<String>>,
     pub mol_data_files: Vec<String>,
     /// Essentially this has only cosmetic importance
-    /// since it has no effect on the functioning of LIME, only on the names of the
+    /// since it has no effect on the functioning of citrus, only on the names of the
     /// collision partners which are printed to stdout. Its main purpose is to reassure
     /// the user who has provided transition rates for a non-LAMDA collision species in
     /// their moldatfile that they are actually getting these values and not some
     /// mysterious reversion to LAMDA.
-    #[serde(default)]
     pub collisional_partner_names: Vec<String>,
-    #[serde(default)]
     pub grid_out_files: Vec<String>,
-    #[serde(default)]
     pub collisional_partner_user_set_flags: isize,
-    #[serde(default)]
     pub radius_squ: f64,
-    #[serde(default)]
     pub min_scale_squ: f64,
-    #[serde(default)]
     pub taylor_cutoff: f64,
-    #[serde(default)]
     pub grid_density_global_max: f64,
-    #[serde(default)]
     pub ncell: usize,
-    #[serde(default)]
     pub n_images: usize,
-    #[serde(default)]
     pub n_species: usize,
-    #[serde(default)]
     pub num_densities: usize,
-    #[serde(default)]
     pub do_pregrid: bool,
-    #[serde(default)]
     pub num_grid_density_maxima: i32,
-    #[serde(default)]
     pub num_dims: usize,
-    #[serde(default)]
     pub n_line_images: usize,
-    #[serde(default)]
     pub n_cont_images: usize,
-    #[serde(default)]
     pub n_solve_iters_done: usize,
-    #[serde(default)]
     pub do_interpolate_vels: bool,
-    #[serde(default)]
     pub use_abun: bool,
-    #[serde(default)]
     pub do_mol_calcs: bool,
-    #[serde(default)]
     pub use_vel_func_in_raytrace: bool,
-    #[serde(default)]
     pub edge_vels_available: bool,
-    #[serde(default)]
     pub write_grid_at_stage: Vec<bool>,
 }
 
+impl Default for Parameters {
+    fn default() -> Self {
+        Parameters {
+            radius: 0.0,
+            min_scale: 0.0,
+            cmb_temp: cc::LOCAL_CMB_TEMP_SI,
+            sink_points: 0,
+            p_intensity: 0,
+            enable_line_blending: false,
+            ray_trace_algorithm: RayTraceAlgorithm::default(),
+            sampling_algorithm: SamplingAlgorithm::default(),
+            lte_only: false,
+            init_lte: false,
+            polarization: false,
+            nsolve_iters: 0,
+            output_file: String::new(),
+            binoutput_file: String::new(),
+            grid_file: String::new(),
+            pre_grid: String::new(),
+            dust_file: None,
+            grid_in_file: String::new(),
+            reset_rng: false,
+            do_solve_rte: true,
+            nmol_weights: Vec::new(),
+            dust_weights: Vec::new(),
+            collisional_partner_mol_weights: Vec::new(),
+            collisional_partner_ids: Vec::new(),
+            g_ir_data_files: None,
+            mol_data_files: Vec::new(),
+            collisional_partner_names: Vec::new(),
+            grid_out_files: Vec::new(),
+            collisional_partner_user_set_flags: 0,
+            radius_squ: 0.0,
+            min_scale_squ: 0.0,
+            taylor_cutoff: 0.0,
+            grid_density_global_max: 0.0,
+            ncell: 0,
+            n_images: 0,
+            n_species: 0,
+            num_densities: 0,
+            do_pregrid: false,
+            num_grid_density_maxima: 0,
+            num_dims: 0,
+            n_line_images: 0,
+            n_cont_images: 0,
+            n_solve_iters_done: 0,
+            do_interpolate_vels: false,
+            use_abun: false,
+            do_mol_calcs: false,
+            use_vel_func_in_raytrace: false,
+            edge_vels_available: false,
+            write_grid_at_stage: vec![false; 5],
+        }
+    }
+}
+
+/// Sampling algorithms to generate grid points for modeling.
 #[derive(Deserialize, Debug, Default)]
-pub enum Sampling {
+pub enum SamplingAlgorithm {
+    /// This algorithm can be used uniform sampling in Log(radius)
+    /// which is useful for models with a central condensation
+    /// (i.e., envelopes, disks)
     Uniform,
+
+    /// This algorithm generates grid points with exact
+    /// spherical rotation symmetry.
     #[default]
     UniformExact,
+
+    /// This generates grid points with a uniform-biased
+    /// sampling in cartesian coordinates.
+    ///
+    /// This is useful for models with no central condensation
+    /// (molecular clouds, galaxies, slab geometries, etc.)
     UniformBiased,
+
+    /// This is a newer algorithm which can quickly generate points with a
+    /// distribution which accurately follows any feasible density function.
+    /// including with sharp step-changes.
+    ///
+    /// The contained value is a vector of [`density maxima`][GridDensityMaxima] which
+    /// the user can provide to help guide the point distribution.
+    ///
+    /// This algorithm also incorporates a quasi-random choice of
+    /// point candidates which avoids the requirement for the relatively
+    /// time-consuming post-gridding smoothing phase. Therefore,
+    /// supplying your own density function will give full control
+    /// over the distribution of points. Currently, [`qhull`] is
+    /// being used to triangulate the point distribution.
+    // TODO: Think about getting rid of qhull dependency and implementing a pure Rust solution for Delaunay triangulation.
+    Modern(Vec<GridDensityMaxima>),
+}
+
+/// A struct to represent a grid density maximum for use with
+/// the [`Modern`][SamplingAlgorithm::Modern] sampling algorithm.
+#[derive(Deserialize, Debug)]
+pub struct GridDensityMaxima {
+    /// Location of the density maximum in 3-D space.
+    pub location: Vec3,
+
+    /// Value of the density maximum at the specified location.
+    pub value: f64,
 }
 
 #[derive(Deserialize, Debug, Default, PartialEq)]
@@ -166,50 +249,33 @@ pub enum RayTraceAlgorithm {
 /// - SI units
 /// - "Lsun per pixel"
 /// - Optical depth
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Image {
-    #[serde(default)]
     pub nchan: usize,
     pub trans: i64,
-    #[serde(default)]
     pub mol_i: usize,
-    #[serde(default)]
     pub pixel: Vec<Spec>,
     pub vel_res: f64,
     pub img_res: f64,
     pub pxls: i64,
-    #[serde(default)]
     pub unit: Unit,
-    #[serde(default)]
     pub img_units: Vec<Unit>,
-    #[serde(default)]
     pub num_units: i64,
-    #[serde(default)]
     pub freq: f64,
-    #[serde(default)]
     pub bandwidth: f64,
-    #[serde(default)]
     pub filename: String,
-    #[serde(default)]
     pub source_velocity: f64,
-    #[serde(default)]
     pub theta: f64,
-    #[serde(default)]
     pub phi: f64,
     pub inclination: f64,
     pub position_angle: f64,
     pub azimuth: f64,
     pub distance: f64,
-    #[serde(default)]
     pub rotation_matrix: RMatrix,
-    #[serde(default)]
     pub do_interpolate_vels: bool,
-    #[serde(default)]
     pub do_line: bool,
-    #[serde(default)]
     pub incl: f64,
-    #[serde(default)]
     pub posang: f64,
 }
 
@@ -224,7 +290,7 @@ pub enum Unit {
     OpticalDepth,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub parameters: Parameters,
     pub images: Vec<Image>,
@@ -332,7 +398,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
 
     let num_func_densities = 1; // Dummy value for now
 
-    if !pars.do_pregrid || pars.restart {
+    if !pars.do_pregrid {
         pars.num_densities = 0;
         if !pars.grid_in_file.is_empty() {
             // Read the grid file in FITS format
@@ -340,7 +406,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
         }
         if pars.num_densities == 0 {
             // So here is the deal:
-            // LIME either asks to supply the number densities (basically from
+            // citrus either asks to supply the number densities (basically from
             // the grid file) or it calculates them a user defined function.
             // These functions had to be written in C by the user.
             // However, I want to do away from this and always ask for a file.
@@ -369,7 +435,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
         }
     }
 
-    if !pars.do_pregrid || pars.restart || !pars.grid_in_file.is_empty() {
+    if !pars.do_pregrid || !pars.grid_in_file.is_empty() {
         // In this case, we will need to calculate grid point locations,
         // thus we will need to call the `grid_density()` function
         // Again this implementation requires more thought.
@@ -640,7 +706,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
 
             v_mod = R_3 * R_2 * R_1 * v_obs.		4
 
-        LIME provides two different schemes of {R_1, R_2, R_3}: {PA, phi, theta} and
+        citrus provides two different schemes of {R_1, R_2, R_3}: {PA, phi, theta} and
         {PA, inclination, azimuth}. As an example, consider phi, which is a rotation of
         the model from the observer Z axis towards the X. The matching obs->mod rotation
         matrix is therefore
@@ -708,7 +774,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
     }
 
     if pars.n_cont_images > 0 {
-        match &pars.dust {
+        match &pars.dust_file {
             Some(dust) if !dust.is_empty() => {
                 // Open the dust file and check if it exists and if it is empty
                 let path = Path::new(dust);

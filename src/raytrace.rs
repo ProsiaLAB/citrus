@@ -665,7 +665,7 @@ fn calc_grid_cont_dust_opacity(
     freq: f64,
     lam_kap: &Option<(RVector, RVector)>,
 ) -> Result<()> {
-    let kappa = if par.dust.is_none() {
+    let kappa = if par.dust_file.is_none() {
         RVector::from_elem(1, 0.0)
     } else if let Some((lam, kap)) = lam_kap {
         RVector::from_elem(1, interpolate_kappa(freq, &lam.view(), &kap.view())?)
