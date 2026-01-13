@@ -9,7 +9,7 @@ blas-src = { version = "0.11.1", features = ["accelerate"] }
 fitsio = "0.21.6"
 ndarray = { version = "0.16.1", features = ["rayon", "serde", "blas"] }
 ndarray-linalg = "0.17.0"
-prosia-extensions = "0.1.5"
+prosia-extensions = { version = "0.1.6", features = ["serde"] }
 qhull = { git = "https://github.com/LucaCiucci/qhull-rs" }
 rand = "0.9.1"
 rayon = "1.10.0"
