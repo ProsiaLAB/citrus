@@ -296,6 +296,14 @@ pub struct Config {
     pub images: Vec<Image>,
 }
 
+impl Config {
+    pub fn from_path(path: &str) -> Result<Self> {
+        let content = fs::read_to_string(path)?; // Propagate file read errors
+        let config = toml::from_str(&content)?; // Propagate config parsing errors
+        Ok(config)
+    }
+}
+
 fn to_config(toml_content: &str) -> Result<(Parameters, HashMap<String, Image>)> {
     let config_value: toml::Value =
         toml::from_str(toml_content).context("Failed to parse TOML content")?; // Use context for parsing error
@@ -333,12 +341,6 @@ fn to_config(toml_content: &str) -> Result<(Parameters, HashMap<String, Image>)>
     }
 
     Ok((parameters, images))
-}
-
-pub fn load_config(path: &str) -> Result<Config> {
-    let content = fs::read_to_string(path)?; // Propagate file read errors
-    let config: Config = toml::from_str(&content)?; // Propagate config parsing errors
-    Ok(config)
 }
 
 /// Parse the configuration file

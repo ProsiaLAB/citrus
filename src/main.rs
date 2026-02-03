@@ -4,6 +4,7 @@ use std::fs;
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 
+use citrus::config::Config;
 use citrus::config::{load_config, parse_config};
 use citrus::engine;
 
@@ -19,7 +20,7 @@ fn main() -> Result<()> {
     let path = &args[0];
 
     // Load the TOML file
-    let input_config = load_config(path).expect("Failed to load config");
+    let input_config = Config::from_path(path).expect("Failed to load config");
 
     dbg!("Loaded config: {:?}", &input_config);
 
