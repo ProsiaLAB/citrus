@@ -1,11 +1,10 @@
 use std::env;
-use std::fs;
 
 use anyhow::Result;
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 
 use citrus::config::Config;
-use citrus::config::{load_config, parse_config};
+use citrus::config::parse_config;
 use citrus::engine;
 
 fn main() -> Result<()> {

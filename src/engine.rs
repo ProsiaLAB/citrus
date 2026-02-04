@@ -1,16 +1,13 @@
-use std::collections::HashMap;
-
 use anyhow::Result;
 use anyhow::bail;
 use prosia_extensions::types::RVector;
-use serde::{Deserialize, Serialize};
 
 use crate::collparts::MolData;
 use crate::collparts::check_user_density_weights;
 use crate::config::{Image, Parameters};
 use crate::grid;
 use crate::io::read_dust_file;
-use crate::pops::popsin;
+
 use crate::raytrace::raytrace;
 
 pub fn run(

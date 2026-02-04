@@ -1,5 +1,4 @@
 use anyhow::Result;
-use anyhow::bail;
 use prosia_extensions::types::{RVector, UVector};
 
 use crate::config::Parameters;

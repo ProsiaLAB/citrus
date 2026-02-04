@@ -32,7 +32,7 @@ type MolDataVec = Vec<MolData>;
 pub struct Parameters {
     /// This value sets the outer radius of the computational domain.
     ///
-    /// # Note
+    /// ### Note
     /// It should be set large enough to cover the entire spatial extend of the
     /// model. In particular, if a cylindrical input model is used (e.g., the
     /// input file for the RATRAN code) one should not use the radius of the
@@ -48,6 +48,21 @@ pub struct Parameters {
     /// centre of the model.
     pub min_scale: f64,
 
+    /// Temperature of the cosmic microwave background in Kelvin.
+    ///
+    /// It defaults to 2.725 K which is the value at zero redshift
+    /// (i.e., the solar neighborhood). One should make sure to set this
+    /// parameter properly when calculating models at a redshift larger
+    /// than zero since
+    /// $$
+    /// T_{\text{CMB}} = T_{\text{CMB},0} (1 + z) \text{K}
+    /// $$
+    /// It should be noted that even though citrus can in this way take
+    /// the change n CMB temperature with increasing $z$ into account,
+    /// it does not (yet) take cosmological effects into account when
+    /// ray tracing (such as stretching of frequencies when using Jansky
+    /// as units).
+    // TODO: Implement cosmological effects in ray tracing
     pub cmb_temp: f64,
 
     /// The sinkPoints are grid points that are distributed randomly at
@@ -74,16 +89,48 @@ pub struct Parameters {
     /// The sampling algorithm used for the model grid.
     ///
     /// By default, the [`UniformExact`][SamplingAlgorithm::UniformExact] is used
-    /// which corresponds to default algorithm in newer versions of LIME.
+    /// which corresponds to default algorithm in newer versions of citrus.
     pub sampling_algorithm: SamplingAlgorithm,
     pub lte_only: bool,
     pub init_lte: bool,
     pub polarization: bool,
     pub nsolve_iters: usize,
+
+    /// This is the file name of the output file that contains the level
+    /// populations. If this parameter is not set, citrus will not output the
+    /// populations. There is no default value.
     pub output_file: String,
+
+    /// This is the file name of the output file that contains the grid,
+    /// populations, and molecular data in binary format. This file is used to
+    /// restart citrus with previously calculated populations. Once the
+    /// populations have been calculated and the binoutputfile has been written,
+    /// citrus can re-raytrace for a different set of image parameters without
+    /// re-calculating the populations. There is no default value.
     pub binoutput_file: String,
+
+    /// This is the file name of the output file that contains the grid. If this
+    /// parameter is not set, citrus will not output the grid. The grid file is
+    /// written out as a VTK file. This is a formatted ascii file that can be
+    /// read with a number of 3D visualizing tools (Visualization Tool Kit,
+    /// Paraview, and others). There is no default value.
     pub grid_file: String,
-    pub pre_grid: String,
+
+    /// Path to the dust opacity file.
+    ///
+    /// This must be prpvided if any continuum images are requested.
+    /// Optional if only line images are requested.
+    ///
+    /// ### File Format
+    /// This table should be a two column ASCII
+    /// file with wavelength in the first column and opacity in the second
+    /// column. Currently citrus uses the same tables as RATRAN from Ossenkopf and
+    /// Henning (1994), and so the wavelength should be given in microns (1e-6
+    /// meters) and the opacity in cm^2/g. This is the only place in citrus where
+    /// SI units are not used. There is
+    /// no default value. A future version of citrus may allow spatial variance
+    /// of the dust opacities, so that opacities can be given as function of x,
+    /// y, and z.
     pub dust_file: Option<String>,
     pub grid_in_file: String,
     pub reset_rng: bool,
@@ -99,7 +146,24 @@ pub struct Parameters {
     /// in the moldatfiles.
     pub collisional_partner_ids: Vec<usize>,
     pub g_ir_data_files: Option<Vec<String>>,
+
+    /// This contains paths to molecular data files.
+    /// It must be provided if any line images are specified
+    /// (or [`do_solve_rte`][Parameters::do_solve_rte] is true).
+    /// It is not read if only continuum images are requested.
+    ///
+    /// Molecular data files contain the
+    /// energy states, Einstein coefficients, and collisional rates which are
+    /// needed by citrus to solve the excitation. These files must conform to
+    /// the standard of the [LAMDA database](http://www.strw.leidenuniv.nl/~moldata).
+    /// If a data file name is give that
+    /// cannot be found locally, citrus will try and download the file instead.
+    /// When downloading data files, the filename can be give both with and
+    /// without the extension .dat (i.e., `CO` or `CO.dat`). moldatfile is an
+    /// array, so multiple data files can be used for a single citrus run. There is
+    /// no default value.
     pub mol_data_files: Vec<String>,
+
     /// Essentially this has only cosmetic importance
     /// since it has no effect on the functioning of citrus, only on the names of the
     /// collision partners which are printed to stdout. Its main purpose is to reassure
@@ -149,7 +213,6 @@ impl Default for Parameters {
             output_file: String::new(),
             binoutput_file: String::new(),
             grid_file: String::new(),
-            pre_grid: String::new(),
             dust_file: None,
             grid_in_file: String::new(),
             reset_rng: false,
@@ -224,7 +287,7 @@ pub enum SamplingAlgorithm {
     Modern(Vec<GridDensityMaxima>),
 }
 
-/// A struct to represent a grid density maximum for use with
+/// Represents a grid density maximum for use with
 /// the [`Modern`][SamplingAlgorithm::Modern] sampling algorithm.
 #[derive(Deserialize, Debug)]
 pub struct GridDensityMaxima {
@@ -376,7 +439,6 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
     pars.ncell = pars.p_intensity + pars.sink_points;
     pars.radius_squ = pars.radius * pars.radius;
     pars.min_scale_squ = pars.min_scale * pars.min_scale;
-    pars.do_pregrid = !pars.pre_grid.is_empty();
     pars.n_solve_iters_done = 0;
     pars.use_abun = true;
 
@@ -523,11 +585,11 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
                     }
                 } else if pars.num_grid_density_maxima > 0 {
                     // Test any maxima that user might have provided
-                    pars.grid_density_global_max = pars.grid_density_max_values[0];
+                    // pars.grid_density_global_max = pars.grid_density_max_values[0];
                     for i in 1..pars.num_grid_density_maxima as usize {
-                        if pars.grid_density_max_values[i] > pars.grid_density_global_max {
-                            pars.grid_density_global_max = pars.grid_density_max_values[i];
-                        }
+                        // if pars.grid_density_max_values[i] > pars.grid_density_global_max {
+                        //     pars.grid_density_global_max = pars.grid_density_max_values[i];
+                        // }
                     }
                 } else {
                     bail!("Could not find a non-pathological grid density value.");

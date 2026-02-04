@@ -140,59 +140,59 @@ pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
     }
 
     // Open grid file
-    let file = File::open(&par.pre_grid)?;
-    let reader = BufReader::new(file);
+    // let file = File::open(&par.pre_grid)?;
+    // let reader = BufReader::new(file);
 
-    for (i, line) in reader.lines().enumerate().take(par.p_intensity) {
-        let line = line?;
-        let values: RVector = line
-            .split_whitespace()
-            .map(|v| {
-                v.parse::<f64>().map_err(|e| {
-                    eprintln!("Failed to parse {}: {}", v, e);
-                    e
-                })
-            })
-            .collect::<Result<RVector, ParseFloatError>>()?;
+    // for (i, line) in reader.lines().enumerate().take(par.p_intensity) {
+    //     let line = line?;
+    //     let values: RVector = line
+    //         .split_whitespace()
+    //         .map(|v| {
+    //             v.parse::<f64>().map_err(|e| {
+    //                 eprintln!("Failed to parse {}: {}", v, e);
+    //                 e
+    //             })
+    //         })
+    //         .collect::<Result<RVector, ParseFloatError>>()?;
 
-        if values.len() != 9 {
-            bail!("Expected 9 values");
-        }
+    //     if values.len() != 9 {
+    //         bail!("Expected 9 values");
+    //     }
 
-        let id = values[0] as i32;
-        if id >= par.p_intensity as i32 {
-            bail!("Invalid grid point ID: {}", id);
-        }
+    //     let id = values[0] as i32;
+    //     if id >= par.p_intensity as i32 {
+    //         bail!("Invalid grid point ID: {}", id);
+    //     }
 
-        gp[i].id = id;
-        gp[i].x[0] = values[1];
-        gp[i].x[1] = values[2];
-        gp[i].x[2] = values[3];
+    //     gp[i].id = id;
+    //     gp[i].x[0] = values[1];
+    //     gp[i].x[1] = values[2];
+    //     gp[i].x[2] = values[3];
 
-        gp[i].dens[0] = values[4];
+    //     gp[i].dens[0] = values[4];
 
-        gp[i].t[0] = values[5];
-        gp[i].t[1] = values[5];
+    //     gp[i].t[0] = values[5];
+    //     gp[i].t[1] = values[5];
 
-        gp[i].vel[0] = values[6];
-        gp[i].vel[1] = values[7];
-        gp[i].vel[2] = values[8];
+    //     gp[i].vel[0] = values[6];
+    //     gp[i].vel[1] = values[7];
+    //     gp[i].vel[2] = values[8];
 
-        gp[i].dopb_turb = 200.0;
+    //     gp[i].dopb_turb = 200.0;
 
-        if let Some(ref mut molecule) = gp[i].mol {
-            molecule[0].abun = 1e-9;
-        } else {
-            bail!("No molecular data found");
-        }
+    //     if let Some(ref mut molecule) = gp[i].mol {
+    //         molecule[0].abun = 1e-9;
+    //     } else {
+    //         bail!("No molecular data found");
+    //     }
 
-        gp[i].sink = false;
-        gp[i].dir = Vec::new();
-        gp[i].neigh = Vec::new();
-        gp[i].mag_field = RVector::zeros(3);
+    //     gp[i].sink = false;
+    //     gp[i].dir = Vec::new();
+    //     gp[i].neigh = Vec::new();
+    //     gp[i].mag_field = RVector::zeros(3);
 
-        utils::progress_bar(i as f64 / par.p_intensity as f64, 50);
-    }
+    //     utils::progress_bar(i as f64 / par.p_intensity as f64, 50);
+    // }
 
     // check grid densities
     if par.do_mol_calcs {
