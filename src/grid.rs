@@ -134,7 +134,7 @@ pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
         // StdRng::from_entropy is a good way to get a random seed
         StdRng::try_from_os_rng().expect("Failed to seed random number generator from entropy")
     };
-    par.num_densities = 1;
+    par.n_densities = 1;
     for dens in gp.iter_mut().map(|g| &mut g.dens) {
         dens.fill(0.0);
     }

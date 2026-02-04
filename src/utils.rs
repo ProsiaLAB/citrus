@@ -119,7 +119,7 @@ pub fn get_dtg(par: &Parameters, dens: &RVecView, gtd: f64) -> f64 {
         cc::AMU_SI * 2.4 * dens[0] / gtd
     } else {
         let mut gas_mass_density_amus = 0.0;
-        for i in 0..par.num_densities {
+        for i in 0..par.n_densities {
             gas_mass_density_amus += dens[i] * par.collisional_partner_mol_weights[i];
         }
         cc::AMU_SI * gas_mass_density_amus / gtd

@@ -75,7 +75,7 @@ pub struct Parameters {
     /// not to slow down the gridding too much. Since this is model dependent, a
     /// global best value cannot be given, but a useful range is between a few
     /// thousands and about ten thousand.
-    pub sink_points: usize,
+    pub n_sink_points: usize,
 
     /// This number is the number of model grid points. The more grid points
     /// that are used, the longer the code will take to run. Too few points
@@ -83,7 +83,42 @@ pub struct Parameters {
     /// getting wrong results. Useful numbers are between a few thousands up to
     /// about one hundred thousand.
     pub p_intensity: usize,
+
+    /// If true, line blending is taken into account, however,
+    /// only if there are any overlapping lines among the transitions
+    /// found in the molecular data files. Enabling line blending
+    /// will slow down the calculations considerably, in particular
+    /// if there are multiple molecular data files.
+    ///
+    /// By default, line blending is disabled.
     pub enable_line_blending: bool,
+
+    /// This parameter specifies the algorithm used by citrus to
+    /// solve the radiative-transfer equations during ray-tracing.
+    /// The default value of zero invokes the algorithm used in
+    /// older versions a value of 1 invokes a new algorithm which is
+    /// much more time-consuming but which produces much smoother
+    /// images, free from step-artifacts.
+    ///
+    /// If none of the four density-linked parameters are provided,
+    /// citrus will attempt to guess the information, in a manner as
+    /// close as possible to the way it was done in version 1.5 and
+    /// earlier. This is safe enough when a single density value is
+    /// returned, and only H2 provided as collision partner in the
+    /// moldata file(s), but more complicated situations can very
+    /// easily result in the code guessing wrongly. For this reason
+    /// we encourage users to make use of these four parameters,
+    /// although in order to preserve backward compatibility with
+    /// old model.c files, we have not (yet) made them mandatory.
+    ///
+    /// ### Note
+    /// There have been additional modifications to the raytracing
+    /// algorithm which have significant effects on the output
+    /// images since citrus-1.5. Image-plane interpolation is now
+    /// employed in areas of the image where the grid point
+    /// spacing is larger than the image pixel spacing. This
+    /// leads both to a smoother image and a shorter processing
+    /// time.
     pub ray_trace_algorithm: RayTraceAlgorithm,
 
     /// The sampling algorithm used for the model grid.
@@ -91,9 +126,45 @@ pub struct Parameters {
     /// By default, the [`UniformExact`][SamplingAlgorithm::UniformExact] is used
     /// which corresponds to default algorithm in newer versions of citrus.
     pub sampling_algorithm: SamplingAlgorithm,
+
+    /// If non-zero, citrus performs a direct LTE calculation rather than solving
+    /// for the populations iteratively. This facility is useful for quick checks. The
+    /// default is false, i.e., full non-LTE calculation.
     pub lte_only: bool,
+
+    /// If true, citrus solves for the level populations as usual, but
+    /// LTE values are used to initialize the populations at the start
+    /// instead of using values at T = 0.
     pub init_lte: bool,
+
+    /// If true, citrus will calculate the polarized continuum emission.
+    /// This parameter only has effect for continuum images. The resulting cube
+    /// will have three channels containing the Stokes I, Q, and U of the continuum emission
+    /// as according to the theory, the V component is zero. In order for polarization
+    /// to work, a magnetic field must be defined.
+    ///
+    /// When polarization is enabled, the implementation follows the
+    /// `DustPol` code (Padovani et al. 2012), except that the expression
+    /// used in Padovani et al. (2012) given for $\sigma^2$ has shown by
+    /// Adele et al. (2015) to be small by a factor of 2. This correction
+    /// has been implemented in citrus.
     pub polarization: bool,
+
+    /// This defines the number of solution iterations citrus
+    /// should perform when solving non-LTE level populations.
+    /// The default is currently 17. Note that it is now possible
+    /// to run citrus in an incremental fashion. If the results
+    /// of solving the RTE through `N` iterations are stored in
+    /// a grid file via setting
+    ///  [`Parameters::grid_out_files`],
+    /// then a second run of citrus, reading the grid file
+    /// via [`Parameters::grid_in_file`],
+    /// [`Parameters::nsolve_iters`]` = M>N`, will continue the
+    /// RTE iterations starting at iteration `N`.
+    /// (If you do this, your results will be slightly
+    /// different, in a random way, than if you go to `M`
+    /// iterations in one go, because the random seeds
+    /// will be different.)
     pub nsolve_iters: usize,
 
     /// This is the file name of the output file that contains the level
@@ -133,17 +204,84 @@ pub struct Parameters {
     /// y, and z.
     pub dust_file: Option<String>,
     pub grid_in_file: String,
+
+    /// If this is set non-zero, LIME will use the same random
+    /// number seeds at the start of each solution iteration.
+    /// This has the effect of choosing the same photon directions
+    /// and frequencies for each iteration (although the directions
+    /// and frequencies change randomly from one grid point to
+    /// the next). This has the effect of decoupling any
+    /// oscillation or wandering of the level populations as
+    /// they relax towards convergence from the intrinsic
+    /// Monte Carlo noise of the discrete solution algorithm.
+    /// Best practice might involve alternating episodes
+    /// with `par->resetRNG` =0 and 1, storing the intermediate
+    /// populations via the :ref:`I/O interface <grid-io>`.
+    /// Very little experience has been accumulated as yet
+    /// with this facility.
     pub reset_rng: bool,
+
+    /// It is now possible to run LIME in two sessions: the
+    /// first to solve the RTE and save the results to file,
+    /// the second to read the file and create raytraced images
+    /// from it. For a session of the first type you should set
+    /// the number of images you specify via the
+    /// :ref:`img <images>` parameter to zero, and give a
+    /// value for one of the elements of
+    /// :ref:`par->gridOutFiles <grid-io>`; for one of
+    /// the second type you set
+    /// :ref:`par->gridInFile <grid-io>` to the name of
+    /// the file you just wrote, and include >0 image
+    /// specifications in :ref:`img <images>`. There is
+    /// a problem however for sessions of the first
+    /// type: if you eventually want full-spectrum cubes
+    /// then you will need some way to tell LIME to solve
+    /// the RTE. In the past LIME has figured out if you
+    /// want this from the presence of spectrum-type images
+    /// in your :ref:`img <images>` list. To replace this
+    /// capability we have added the present parameter.
+    /// Thus, for first-stage sessions (supposing you choose
+    /// to run LIME in that way rather than in the previous
+    /// single-pass style) when you know that you will
+    /// eventually want spectral cubes, you should set
+    /// the present parameter. For all other cases it may
+    /// be ignored.
     pub do_solve_rte: bool,
-    pub nmol_weights: Vec<f64>,
+
+    /// We calculate the number density of each of its radiating
+    /// species, at each grid point, by multiplying the abundance
+    /// of the species (returned via the function of that name)
+    /// by a weighted sum of the density values. This parameter
+    /// allows the user to specify the weights in that sum.
+    pub n_mol_weights: Vec<f64>,
+
+    /// Controls how the dust mass density and hence opacity is calculated.
+    /// The calculation of dust mass density in older versions made use of
+    /// a hard-wired average gas density value of 2.4, appropriate
+    /// to a mix of 90% molecular hydrogen and 10% helium. This
+    /// older formula will be used if none of the current four
+    /// parameters are set.
     pub dust_weights: Vec<f64>,
 
     pub collisional_partner_mol_weights: Vec<f64>,
+
+    /// The integer values are the codes given [here](http://home.strw.leidenuniv.nl/~moldata/molformat.html).
+    /// Currently recognized values range from 1 to 7 inclusive. E.g if the only colliding
+    /// species of interest in your model is H2, your density function should return a
+    /// single value, namely the density of molecular hydrogen, and (if you supply a
+    /// collPartIds value at all) you should set collPartIds[0] = 1 (the LAMDA code for
+    /// H2). However, if you use collisional partners that are not one of LAMDA
+    /// partners, it is fine to use any of the values between 1 and 7 to match
+    /// the density function with collisional information in the datafiles.  Some of
+    /// the messages in citrus will refer to the default LAMDA partner molecules, but
+    /// this does not affect the calculations. In future we will introduce a better mechanism to allow the user to specify non-LAMDA collision partners.
+    ///
     /// This list acts as a link between the `N` density
     /// function returns (I'm using here `N` as shorthand for `num_densities`) and the `M`
     /// collision partner ID integers found in the moldatfiles. This allows us to
     /// associate density functions with the collision partner transition rates provided
     /// in the moldatfiles.
+    // TODO: Perhaps implement this on type-system level using enums?
     pub collisional_partner_ids: Vec<usize>,
     pub g_ir_data_files: Option<Vec<String>>,
 
@@ -180,10 +318,10 @@ pub struct Parameters {
     pub ncell: usize,
     pub n_images: usize,
     pub n_species: usize,
-    pub num_densities: usize,
+    pub n_densities: usize,
     pub do_pregrid: bool,
-    pub num_grid_density_maxima: i32,
-    pub num_dims: usize,
+    pub n_grid_density_maxima: i32,
+    pub n_dims: usize,
     pub n_line_images: usize,
     pub n_cont_images: usize,
     pub n_solve_iters_done: usize,
@@ -201,7 +339,7 @@ impl Default for Parameters {
             radius: 0.0,
             min_scale: 0.0,
             cmb_temp: cc::LOCAL_CMB_TEMP_SI,
-            sink_points: 0,
+            n_sink_points: 0,
             p_intensity: 0,
             enable_line_blending: false,
             ray_trace_algorithm: RayTraceAlgorithm::default(),
@@ -217,7 +355,7 @@ impl Default for Parameters {
             grid_in_file: String::new(),
             reset_rng: false,
             do_solve_rte: true,
-            nmol_weights: Vec::new(),
+            n_mol_weights: Vec::new(),
             dust_weights: Vec::new(),
             collisional_partner_mol_weights: Vec::new(),
             collisional_partner_ids: Vec::new(),
@@ -233,10 +371,10 @@ impl Default for Parameters {
             ncell: 0,
             n_images: 0,
             n_species: 0,
-            num_densities: 0,
+            n_densities: 0,
             do_pregrid: false,
-            num_grid_density_maxima: 0,
-            num_dims: 0,
+            n_grid_density_maxima: 0,
+            n_dims: 0,
             n_line_images: 0,
             n_cont_images: 0,
             n_solve_iters_done: 0,
@@ -435,8 +573,8 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
     // while i < defaults::MAX_NUM_HIGH && pars.grid_density_max_values[i] >= 0.0 {
     //     i += 1;
     // }
-    pars.num_grid_density_maxima = i as i32;
-    pars.ncell = pars.p_intensity + pars.sink_points;
+    pars.n_grid_density_maxima = i as i32;
+    pars.ncell = pars.p_intensity + pars.n_sink_points;
     pars.radius_squ = pars.radius * pars.radius;
     pars.min_scale_squ = pars.min_scale * pars.min_scale;
     pars.n_solve_iters_done = 0;
@@ -452,23 +590,23 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
         if pars.p_intensity == 0 {
             bail!("Number of intensity points must be positive.");
         }
-        if pars.sink_points == 0 {
+        if pars.n_sink_points == 0 {
             bail!("Number of sink points must be positive.");
         }
     }
 
     pars.grid_density_global_max = 1.0;
-    pars.num_densities = 0;
+    pars.n_densities = 0;
 
     let num_func_densities = 1; // Dummy value for now
 
     if !pars.do_pregrid {
-        pars.num_densities = 0;
+        pars.n_densities = 0;
         if !pars.grid_in_file.is_empty() {
             // Read the grid file in FITS format
             // TODO: Currently not implemented
         }
-        if pars.num_densities == 0 {
+        if pars.n_densities == 0 {
             // So here is the deal:
             // citrus either asks to supply the number densities (basically from
             // the grid file) or it calculates them a user defined function.
@@ -491,9 +629,9 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
             // }
             // ```
             // For now, we will just set `num_densities` to 1.
-            pars.num_densities = num_func_densities;
+            pars.n_densities = num_func_densities;
 
-            if pars.num_densities == 0 {
+            if pars.n_densities == 0 {
                 bail!("No density values returned");
             }
         }
@@ -583,10 +721,10 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
                     if temp_point_density > pars.grid_density_global_max {
                         pars.grid_density_global_max = temp_point_density;
                     }
-                } else if pars.num_grid_density_maxima > 0 {
+                } else if pars.n_grid_density_maxima > 0 {
                     // Test any maxima that user might have provided
                     // pars.grid_density_global_max = pars.grid_density_max_values[0];
-                    for i in 1..pars.num_grid_density_maxima as usize {
+                    for i in 1..pars.n_grid_density_maxima as usize {
                         // if pars.grid_density_max_values[i] > pars.grid_density_global_max {
                         //     pars.grid_density_global_max = pars.grid_density_max_values[i];
                         // }
@@ -626,7 +764,7 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
 
     pars.taylor_cutoff = (24.0 * f64::EPSILON).powf(0.25);
     pars.n_images = n_images;
-    pars.num_dims = N_DIMS;
+    pars.n_dims = N_DIMS;
 
     // Allocate pixel space and parse image information
     for (key, img) in imgs.iter_mut().enumerate() {
