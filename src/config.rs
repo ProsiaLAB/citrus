@@ -28,7 +28,7 @@ type MolDataVec = Vec<MolData>;
 /// citrus with previously calculated populations. In that case, none of the
 /// non-optional parameters are required.
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct Parameters {
     /// This value sets the outer radius of the computational domain.
     ///
@@ -451,7 +451,7 @@ pub enum RayTraceAlgorithm {
 /// - "Lsun per pixel"
 /// - Optical depth
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct Image {
     pub nchan: usize,
     pub trans: i64,
@@ -476,8 +476,36 @@ pub struct Image {
     pub rotation_matrix: RMatrix,
     pub do_interpolate_vels: bool,
     pub do_line: bool,
-    pub incl: f64,
-    pub posang: f64,
+}
+
+impl Default for Image {
+    fn default() -> Self {
+        Image {
+            nchan: 0,
+            trans: 0,
+            mol_i: 0,
+            vel_res: 0.0,
+            img_res: 0.0,
+            pxls: 0,
+            unit: Unit::JskyPerPixel,
+            freq: 0.0,
+            bandwidth: 0.0,
+            source_velocity: 0.0,
+            theta: 0.0,
+            phi: 0.0,
+            inclination: 0.0,
+            position_angle: 0.0,
+            azimuth: 0.0,
+            distance: 0.0,
+            do_interpolate_vels: false,
+            do_line: false,
+            pixel: Vec::new(),
+            img_units: Vec::new(),
+            filename: String::new(),
+            rotation_matrix: RMatrix::eye(N_DIMS),
+            num_units: 0,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -921,7 +949,8 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
 
             */
 
-        let do_theta_phi = img.incl < -900.0 || img.azimuth < -900.0 || img.posang < -900.0;
+        let do_theta_phi =
+            img.inclination < -900.0 || img.azimuth < -900.0 || img.position_angle < -900.0;
         if do_theta_phi {
             // For the present position angle is not implemented
             // for the theta/phi scheme, so we will just load the
@@ -929,8 +958,8 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
             img.rotation_matrix = RMatrix::eye(3);
         } else {
             // Load position angle matrix
-            let cos_pa = img.posang.cos();
-            let sin_pa = img.posang.sin();
+            let cos_pa = img.position_angle.cos();
+            let sin_pa = img.position_angle.sin();
             img.rotation_matrix = array![
                 [cos_pa, -sin_pa, 0.0],
                 [sin_pa, cos_pa, 0.0],
@@ -948,8 +977,8 @@ pub fn parse_config(input_config: Config) -> Result<(Parameters, Images, Option<
             ]
         } else {
             // Load inclination matrix R_incl
-            let cos_incl = (img.incl + std::f64::consts::PI).cos();
-            let sin_incl = (img.incl + std::f64::consts::PI).sin();
+            let cos_incl = (img.inclination + std::f64::consts::PI).cos();
+            let sin_incl = (img.inclination + std::f64::consts::PI).sin();
             array![
                 [cos_incl, 0.0, -sin_incl],
                 [0.0, 1.0, 0.0],
