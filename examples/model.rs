@@ -4,8 +4,6 @@ use anyhow::Result;
 use anyhow::bail;
 
 use citrus::config::Config;
-use citrus::config::parse_config;
-use citrus::engine;
 
 fn main() -> Result<()> {
     // Collect command line arguments
@@ -23,9 +21,6 @@ fn main() -> Result<()> {
 
     dbg!("Loaded config: {:?}", &input_config);
 
-    // Parse the loaded `Config` struct
-    let (mut par, mut imgs, mol_data) = parse_config(input_config)?;
-
-    engine::run(&mut par, &mut imgs, &mol_data)?;
+    // engine::run(&mut par, &mut imgs, &mol_data)?;
     Ok(())
 }
