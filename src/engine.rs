@@ -15,7 +15,7 @@ pub fn run(
     imgs: &mut Vec<Image>,
     mol_data: &Option<Vec<MolData>>,
 ) -> Result<()> {
-    if par.nsolve_iters > par.n_solve_iters_done || par.lte_only {
+    if par.n_solve_iters > par.n_solve_iters_done || par.lte_only {
         par.do_solve_rte = true;
     }
     par.do_mol_calcs = par.do_solve_rte || par.n_line_images > 0;
@@ -36,12 +36,7 @@ pub fn run(
         );
     }
 
-    let mut gp = if par.do_pregrid {
-        let mut gp = grid::set_default_grid(par.ncell, par.n_species);
-        grid::pre_define(par, &mut gp)?; // sets `par.num_densities`
-        check_user_density_weights(par)?;
-        gp
-    } else {
+    let mut gp = {
         check_user_density_weights(par)?;
         grid::read_or_build_grid(par)?
     };
