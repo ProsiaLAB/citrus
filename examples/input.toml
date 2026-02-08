@@ -2,12 +2,12 @@
 radius = 2000                              # in AU
 min_scale = 0.5                            # in AU
 p_intensity = 4000
-sink_points = 3000
+n_sink_points = 3000
 dust = "jena_thin_e6.tab"
-mol_data_file = ["hco+@xpol.dat"]
+mol_data_files = ["hco+@xpol.dat"]
 sampling = "UniformExact"
-nsolve_iters = 14
-reset_RNG = 0
+n_solve_iters = 14
+reset_rng = false
 collisional_partner_ids = [1]
 nmol_weights = [1.0]
 collisional_partner_names = ["H2"]
