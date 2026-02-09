@@ -16,7 +16,7 @@ pub mod engine;
 pub mod grid;
 pub mod io;
 pub mod lines;
-pub mod macros;
+pub mod models;
 pub mod pops;
 pub mod raytrace;
 pub mod solver;
