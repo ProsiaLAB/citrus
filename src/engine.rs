@@ -8,11 +8,13 @@ use crate::config::{Image, Parameters};
 use crate::grid;
 use crate::io::read_dust_file;
 
+use crate::models::Model;
 use crate::raytrace::raytrace;
 
-pub fn run(
+pub fn run<M: Model>(
+    model: M,
     par: &mut Parameters,
-    imgs: &mut Vec<Image>,
+    imgs: &mut [Image],
     mol_data: &Option<Vec<MolData>>,
 ) -> Result<()> {
     if par.n_solve_iters > par.n_solve_iters_done || par.lte_only {
@@ -52,7 +54,7 @@ pub fn run(
     let mol_slice = mol_data.as_ref().expect("mol_data is None").as_slice();
 
     if par.n_cont_images > 0 {
-        for (_, img) in imgs.iter_mut().enumerate() {
+        for img in imgs.iter_mut() {
             raytrace(img, gp.as_mut_slice(), par, mol_slice, &lam_kap)?;
         }
     }
