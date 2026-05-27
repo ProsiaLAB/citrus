@@ -6,11 +6,12 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.95"
 blas-src = { version = "0.11.1", features = ["accelerate"] }
+codata = "0.1.0"
 fitsio = "0.21.6"
 ndarray = { version = "0.16.1", features = ["rayon", "serde", "blas"] }
 ndarray-linalg = "0.17.0"
 prosia-extensions = { version = "0.1.6", features = ["serde"] }
-qhull = { git = "https://github.com/LucaCiucci/qhull-rs" }
+qhull-sys = { git = "https://github.com/kmaitreys/qhull-sys" }
 rand = "0.9.1"
 rayon = "1.10.0"
 serde = { version = "1.0.217", features = ["derive"] }

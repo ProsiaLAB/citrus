@@ -1,6 +1,6 @@
 use rand::rngs::StdRng;
 
-use crate::config::Parameters;
+use crate::config::ParameterInput;
 use crate::constants::N_DIMS;
 use crate::utils::qrng::Halton;
 
@@ -19,7 +19,7 @@ type MonitorFn = dyn Fn(
 );
 
 pub struct TreeRandomConstantType {
-    pub par: Parameters,
+    pub par: ParameterInput,
     pub random_gen_type: StdRng,
     pub random_seed: usize,
     pub quasi_random_gen_type: Halton,

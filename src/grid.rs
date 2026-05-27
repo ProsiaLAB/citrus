@@ -6,12 +6,11 @@ use std::num::ParseFloatError;
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use prosia_extensions::types::RVector;
-use qhull::QhBuilder;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
-use crate::config::Parameters;
-use crate::constants::{self as cc, N_DIMS};
+use crate::config::ParameterInput;
+use crate::constants::N_DIMS;
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
 use crate::utils;
@@ -124,7 +123,7 @@ pub fn set_default_grid(num_points: usize, num_species: usize) -> Vec<Grid> {
     gp
 }
 
-pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
+pub fn pre_define(par: &mut ParameterInput, gp: &mut Vec<Grid>) -> Result<()> {
     let mut rand_gen = if true {
         // Use fixed seed for reproducibility
         // Note: SeedableRng::seed_from_u64 takes a u64 seed
@@ -266,7 +265,7 @@ pub fn pre_define(par: &mut Parameters, gp: &mut Vec<Grid>) -> Result<()> {
     Ok(())
 }
 
-pub fn read_or_build_grid(par: &mut Parameters) -> Result<Vec<Grid>> {
+pub fn read_or_build_grid(par: &mut ParameterInput) -> Result<Vec<Grid>> {
     if !par.grid_in_file.is_empty() {
         read_grid_init(par);
     }
@@ -274,7 +273,7 @@ pub fn read_or_build_grid(par: &mut Parameters) -> Result<Vec<Grid>> {
     Ok(Vec::new())
 }
 
-fn read_grid_init(par: &mut Parameters) {
+fn read_grid_init(par: &mut ParameterInput) {
     let num_desired_kwds = 3;
     let mut desired_kwds = {
         let mut v = Vec::with_capacity(num_desired_kwds);
@@ -315,7 +314,7 @@ fn read_grid() {
     todo!()
 }
 
-fn check_grid_densities(gp: &[Grid], par: &Parameters) {
+fn check_grid_densities(gp: &[Grid], par: &ParameterInput) {
     let mut warning_already_issued = false;
 
     for (i, _) in gp.iter().enumerate().take(par.p_intensity) {
@@ -645,7 +644,7 @@ fn dist_calc(gp: &mut [Grid], num_points: usize) {
 
 /// Write the grid points to a VTK file
 /// The VTK file is written in the unstructured points format.
-fn write_vtk_unstructured_points(gp: &[Grid], par: &Parameters) -> Result<()> {
+fn write_vtk_unstructured_points(gp: &[Grid], par: &ParameterInput) -> Result<()> {
     // pt_array contains the grid point locations in the format required by qhull.
     let mut pt_array = Vec::with_capacity(par.ncell * N_DIMS);
     for gpi in gp.iter().take(par.ncell) {

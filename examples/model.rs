@@ -4,6 +4,7 @@ use anyhow::Result;
 use anyhow::bail;
 
 use citrus::config::Config;
+use citrus::config::Parameters;
 use citrus::constants as cc;
 use citrus::engine;
 use citrus::models::Model;
@@ -90,7 +91,9 @@ fn main() -> Result<()> {
     let path = &args[0];
 
     // Load the TOML file
-    let input_config = Config::from_path(path).expect("Failed to load config");
+    let mut input_config = Config::from_path(path).expect("Failed to load config");
+
+    input_config.parse(&Lime);
 
     dbg!("Loaded config: {:?}", &input_config);
 

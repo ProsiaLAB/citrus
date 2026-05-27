@@ -5,6 +5,7 @@ use std::vec;
 
 use anyhow::Result;
 use anyhow::{anyhow, bail};
+use codata as cc;
 use ndarray_linalg::{SVD, Solve};
 use prosia_extensions::types::{RMatrix, RVector, UVector};
 use qhull::QhBuilder;
@@ -12,8 +13,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelI
 
 use crate::collparts::MolData;
 use crate::config::RayTraceAlgorithm;
-use crate::config::{Image, Parameters};
-use crate::constants as cc;
+use crate::config::{ImageInput, ParameterInput};
 use crate::constants::N_DIMS;
 use crate::grid::DelaunayResult;
 use crate::grid::delaunay;
@@ -661,7 +661,7 @@ fn follow_ray_through_cells(
 
 fn calc_grid_cont_dust_opacity(
     gp: &mut [Grid],
-    par: &Parameters,
+    par: &ParameterInput,
     freq: f64,
     lam_kap: &Option<(RVector, RVector)>,
 ) -> Result<()> {
@@ -822,8 +822,8 @@ fn line_plane_intersect(
 fn trace_ray(
     ray: &mut RayData,
     gp: &[Grid],
-    img: &Image,
-    par: &Parameters,
+    img: &ImageInput,
+    par: &ParameterInput,
     mol_data: &[MolData],
 ) -> Result<(), RTCError> {
     const N_STEPS_THROUGH_CELL: usize = 10;
@@ -993,7 +993,7 @@ fn do_barycentric_interpolation(
     gip: &mut GridInterp,
     gp: &[Grid],
     mol_data: &[MolData],
-    par: &Parameters,
+    par: &ParameterInput,
     gis: &[usize; 3],
     intersect: &Intersect,
     x_cmpts_ray: RVector,
@@ -1039,7 +1039,7 @@ fn do_barycentric_interpolation(
 
 fn do_segment_interpolation(
     gips: &mut [GridInterp],
-    par: &Parameters,
+    par: &ParameterInput,
     mol_data: &[MolData],
     ia: usize,
     si: usize,
@@ -1175,8 +1175,8 @@ fn trace_ray_smooth(
     ray: &mut RayData,
     gips: &mut [GridInterp],
     gp: &[Grid],
-    img: &Image,
-    par: &Parameters,
+    img: &ImageInput,
+    par: &ParameterInput,
     mol_data: &[MolData],
     rtp: &RTPreparation,
 ) -> Result<(), RTCError> {
@@ -1538,7 +1538,7 @@ fn locate_ray_on_image(
     size: f64,
     img_centre_x_pxls: f64,
     img_centre_y_pxls: f64,
-    img: &Image,
+    img: &ImageInput,
 ) -> (bool, usize) {
     let xi = (x[0] / size + img_centre_x_pxls).floor() as i64;
     let yi = (x[1] / size + img_centre_y_pxls).floor() as i64;
@@ -1551,7 +1551,7 @@ fn locate_ray_on_image(
 }
 
 fn assign_ray_on_image(
-    img: &mut Image,
+    img: &mut ImageInput,
     x: &[f64; 2],
     size: f64,
     img_centre_x_pxls: f64,
@@ -1617,7 +1617,7 @@ fn extract_grid_xs(num_points: usize, gp: &[Grid]) -> RVector {
     xvals
 }
 
-fn convert_cell_to_simplex(cells: &[Cell], par: &Parameters, gp: &[Grid]) -> Vec<Simplex> {
+fn convert_cell_to_simplex(cells: &[Cell], par: &ParameterInput, gp: &[Grid]) -> Vec<Simplex> {
     let mut simplices = Vec::with_capacity(par.ncell);
 
     // Step 1: Initialize all simplices with geometry and vertex data
@@ -1756,7 +1756,7 @@ fn get_2d_cells(rays: &[RayData], num_active_rays: usize) -> Result<Vec<Simplex>
     Ok(simplices_2d)
 }
 
-fn prepare_raytrace(gp: &mut [Grid], par: &Parameters) -> Result<Option<RTPreparation>> {
+fn prepare_raytrace(gp: &mut [Grid], par: &ParameterInput) -> Result<Option<RTPreparation>> {
     const NUM_FACES: usize = N_DIMS + 1;
     const N_FACES_INV: f64 = 1.0 / (NUM_FACES as f64);
     match par.ray_trace_algorithm {
@@ -1787,9 +1787,9 @@ fn prepare_raytrace(gp: &mut [Grid], par: &Parameters) -> Result<Option<RTPrepar
 }
 
 pub fn raytrace(
-    img: &mut Image,
+    img: &mut ImageInput,
     gp: &mut [Grid],
-    par: &Parameters,
+    par: &ParameterInput,
     mol_data: &[MolData],
     lam_kap: &Option<(RVector, RVector)>,
 ) -> Result<(), RTCError> {

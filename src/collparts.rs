@@ -1,7 +1,7 @@
 use anyhow::Result;
 use prosia_extensions::types::{RVector, UVector};
 
-use crate::config::Parameters;
+use crate::config::ParameterInput;
 
 #[derive(Debug, Default)]
 pub struct CollisionalPartnerData {
@@ -82,6 +82,6 @@ pub struct Rates {
 ///
 ///         * par->nMolWeights: this list gives the weights to be applied to the N
 /// density values when calculating molecular densities from abundances.
-pub fn check_user_density_weights(par: &mut Parameters) -> Result<()> {
+pub fn check_user_density_weights(par: &mut ParameterInput) -> Result<()> {
     todo!()
 }

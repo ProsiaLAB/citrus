@@ -4,7 +4,7 @@ use prosia_extensions::types::RVector;
 
 use crate::collparts::MolData;
 use crate::collparts::check_user_density_weights;
-use crate::config::{Image, Parameters};
+use crate::config::{ImageInput, ParameterInput};
 use crate::grid;
 use crate::io::read_dust_file;
 
@@ -13,8 +13,8 @@ use crate::raytrace::raytrace;
 
 pub fn run<M: Model>(
     model: M,
-    par: &mut Parameters,
-    imgs: &mut [Image],
+    par: &mut ParameterInput,
+    imgs: &mut [ImageInput],
     mol_data: &Option<Vec<MolData>>,
 ) -> Result<()> {
     if par.n_solve_iters > par.n_solve_iters_done || par.lte_only {

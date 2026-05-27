@@ -1,9 +1,9 @@
 use anyhow::Result;
 use anyhow::bail;
+use codata as cc;
 use prosia_extensions::types::{RMatrix, RVector};
 
 use crate::collparts::MolData;
-use crate::constants as cc;
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
 

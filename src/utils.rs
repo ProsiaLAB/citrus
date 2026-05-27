@@ -2,10 +2,10 @@
 use std::io::{self, Write}; // Import the Write trait
 
 use anyhow::Result;
+use codata as cc;
 use prosia_extensions::types::{RVecView, RVector};
 
-use crate::config::Parameters;
-use crate::constants as cc;
+use crate::config::ParameterInput;
 
 use self::erf::erf;
 use self::interp::{CubicSpline, SplineError};
@@ -114,7 +114,7 @@ pub fn get_dust_temp(ts_kelvin: &[f64; 2]) -> f64 {
     }
 }
 
-pub fn get_dtg(par: &Parameters, dens: &RVecView, gtd: f64) -> f64 {
+pub fn get_dtg(par: &ParameterInput, dens: &RVecView, gtd: f64) -> f64 {
     if par.collisional_partner_user_set_flags == 0 {
         cc::AMU_SI * 2.4 * dens[0] / gtd
     } else {
