@@ -13,7 +13,7 @@ ndarray-linalg = "0.18.1"
 planetes-ext = { git = "https://github.com/PlanetesLAB/planetes-ext", features = [
     "serde",
 ], tag = "v0.2.0" }
-qhull-sys = { git = "https://github.com/kmaitreys/qhull-sys" }
+qhull-sys = { git = "https://github.com/PlanetesLAB/qhull-sys" }
 rand = "0.10.1"
 rayon = "1.12.0"
 serde = { version = "1.0.228", features = ["derive"] }

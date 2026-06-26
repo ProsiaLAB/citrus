@@ -514,7 +514,7 @@ dependencies = [
 [[package]]
 name = "qhull-sys"
 version = "0.1.0"
-source = "git+https://github.com/kmaitreys/qhull-sys#475aa83339084c92920937f7b115af34a8c1db3d"
+source = "git+https://github.com/PlanetesLAB/qhull-sys#eba39df5094d094b77cf27b46f6c434690104119"
 dependencies = [
  "bindgen",
  "cc",
