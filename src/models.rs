@@ -1,4 +1,4 @@
-use prosia_extensions::types::Vec3;
+use planetes_ext::types::Vec3;
 
 use crate::config::{ParameterInput, SamplingAlgorithm};
 

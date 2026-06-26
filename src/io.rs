@@ -4,7 +4,7 @@ use std::io::BufReader;
 use std::path::Path;
 
 use anyhow::Result;
-use prosia_extensions::types::RVector;
+use planetes_ext::types::RVector;
 
 pub fn read_dust_file(filename: &str) -> Result<(RVector, RVector)> {
     let path = Path::new(filename);

@@ -7,7 +7,7 @@ use anyhow::Result;
 use anyhow::{anyhow, bail};
 use codata as cc;
 use ndarray_linalg::{SVD, Solve};
-use prosia_extensions::types::{RMatrix, RVector, UVector};
+use planetes_ext::types::{RMatrix, RVector, UVector};
 use qhull::QhBuilder;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use anyhow::bail;
-use prosia_extensions::types::RVector;
+use planetes_ext::types::RVector;
 
 use crate::collparts::MolData;
 use crate::collparts::check_user_density_weights;

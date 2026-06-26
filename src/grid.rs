@@ -5,7 +5,7 @@ use std::num::ParseFloatError;
 
 use anyhow::Result;
 use anyhow::{anyhow, bail};
-use prosia_extensions::types::RVector;
+use planetes_ext::types::RVector;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 

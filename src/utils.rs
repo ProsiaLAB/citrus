@@ -3,7 +3,7 @@ use std::io::{self, Write}; // Import the Write trait
 
 use anyhow::Result;
 use codata as cc;
-use prosia_extensions::types::{RVecView, RVector};
+use planetes_ext::types::{RVecView, RVector};
 
 use crate::config::ParameterInput;
 
@@ -159,7 +159,7 @@ pub fn progress_bar(progress: f64, width: usize) {
 pub mod interp {
     use anyhow::Result;
 
-    use prosia_extensions::types::{RVecView, RVector};
+    use planetes_ext::types::{RVecView, RVector};
 
     pub struct CubicSpline {
         x: RVector,

@@ -1,5 +1,5 @@
 #![doc(
-    html_logo_url = "https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg"
+    html_logo_url = "https://raw.githubusercontent.com/PlanetesLAB/planeteslab.github.io/refs/heads/main/images/planeteslab.jpeg"
 )]
 //! This is the documentation for the `citrus`.
 //!
@@ -7,7 +7,7 @@
 //! from an astronomical source. The code uses unstructured 3D Delaunay grids for photon transport and
 //! accelerated Lambda Iteration for population calculations.
 //!
-//! For a detailed theoretical description of the code, please read the [book](https://prosialab.github.io/books/citrus/).
+//! For a detailed theoretical description of the code, please read the [book](https://planeteslab.github.io/books/citrus/).
 
 pub mod collparts;
 pub mod config;

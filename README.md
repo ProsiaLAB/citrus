@@ -13,7 +13,7 @@ Implementation of LIME (LIne Modelling Engine) developed by Brinch &amp; Hogerhe
 
 Detailed technical documentation generated from the Rust source is available at the following link.
 
-[![API Docs](https://img.shields.io/badge/docs-citrus-informational?style=for-the-badge&labelColor=20232a&color=4e7ca1)](https://prosialab.github.io/documentation/citrus/)
+[![API Docs](https://img.shields.io/badge/docs-citrus-informational?style=for-the-badge&labelColor=20232a&color=4e7ca1)](https://planeteslab.github.io/documentation/citrus/)
 
 ---
 
@@ -21,4 +21,4 @@ Detailed technical documentation generated from the Rust source is available at 
 
 An primer on line modeling from astrophysical sources written using mdBook, covering the theoretical background and implementation details of `citrus`.
 
-[![Primer](https://img.shields.io/badge/book-mdBook-informational?style=for-the-badge&labelColor=20232a&color=4e7ca1)](https://prosialab.github.io/books/citrus/)
+[![Primer](https://img.shields.io/badge/book-mdBook-informational?style=for-the-badge&labelColor=20232a&color=4e7ca1)](https://planeteslab.github.io/books/citrus/)

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use prosia_extensions::types::{RVector, UVector};
+use planetes_ext::types::{RVector, UVector};
 
 use crate::config::ParameterInput;
 

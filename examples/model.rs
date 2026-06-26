@@ -8,7 +8,7 @@ use citrus::config::Parameters;
 use citrus::constants as cc;
 use citrus::engine;
 use citrus::models::Model;
-use prosia_extensions::types::Vec3;
+use planetes_ext::types::Vec3;
 
 pub struct Lime;
 

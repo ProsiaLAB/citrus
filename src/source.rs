@@ -1,7 +1,7 @@
 use anyhow::Result;
 use anyhow::bail;
 use codata as cc;
-use prosia_extensions::types::{RMatrix, RVector};
+use planetes_ext::types::{RMatrix, RVector};
 
 use crate::collparts::MolData;
 use crate::lines::ContinuumLine;
