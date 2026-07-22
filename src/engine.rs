@@ -8,11 +8,21 @@ use crate::config::{ImageInput, ParameterInput};
 use crate::grid;
 use crate::io::read_dust_file;
 
-use crate::models::Model;
 use crate::raytrace::raytrace;
 
-pub fn run<M: Model>(
-    model: M,
+pub struct LamKap {
+    pub lam: RVector,
+    pub kap: RVector,
+}
+
+/// Run the code
+///
+/// # Errors
+/// This function may fail if the configuration is invalid.
+///
+/// # Panics
+/// This function may panic if the model is invalid.
+pub fn run(
     par: &mut ParameterInput,
     imgs: &mut [ImageInput],
     mol_data: Option<&Vec<MolData>>,
@@ -28,7 +38,7 @@ pub fn run<M: Model>(
     if !par.do_mol_calcs && par.init_lte {
         let msg = "WARNING: Your choice of `init_lte` will have no effect \
         as no molecular calculations are requested.";
-        eprintln!("{}", msg);
+        eprintln!("{msg}");
     }
 
     if par.n_species > 0 && !par.do_mol_calcs {
@@ -43,7 +53,7 @@ pub fn run<M: Model>(
         grid::read_or_build_grid(par)?
     };
 
-    let lam_kap: Option<(RVector, RVector)> = match &par.dust_file {
+    let lam_kap = match &par.dust_file {
         Some(dust) if !dust.is_empty() => Some(read_dust_file(dust)?),
         _ => {
             eprintln!("No dust file provided.");
@@ -55,7 +65,7 @@ pub fn run<M: Model>(
 
     if par.n_cont_images > 0 {
         for img in imgs.iter_mut() {
-            raytrace(img, gp.as_mut_slice(), par, mol_slice, &lam_kap)?;
+            raytrace(img, gp.as_mut_slice(), par, mol_slice, lam_kap.as_ref())?;
         }
     }
 

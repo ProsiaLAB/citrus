@@ -12,12 +12,11 @@ use qhull::QhBuilder;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::collparts::MolData;
-use crate::config::Image;
-use crate::config::ImageKind;
 use crate::config::RayTraceAlgorithm;
 use crate::config::{ImageInput, ParameterInput};
 use crate::constants;
 use crate::constants::N_DIMS;
+use crate::engine::LamKap;
 use crate::grid::DelaunayResult;
 use crate::grid::delaunay;
 use crate::grid::{Cell, Grid};
@@ -79,7 +78,7 @@ impl std::fmt::Display for RTCError {
             RTCError::NeighborNotFound => write!(f, "Neighbor not found"),
             RTCError::NotFound => write!(f, "Not found"),
             RTCError::EmptyGrid => write!(f, "Grid is empty"),
-            RTCError::Other(msg) => write!(f, "{}", msg),
+            RTCError::Other(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -124,9 +123,7 @@ impl ChainContext {
             (self.chain_of_cell_ids)[self.ncells_in_chain] = self.isimplex;
             for fi in 0..NUM_FACES {
                 if fi != self.entry_face_index
-                    && (simplices[self.isimplex].neigh[fi].is_none()
-                        || simplices[self.isimplex].neigh[fi]
-                            .is_some_and(|n| !(self.cell_visited)[n]))
+                    && simplices[self.isimplex].neigh[fi].is_none_or(|n| !(self.cell_visited)[n])
                 {
                     let face = rtp.simplices[self.isimplex].extract_face(fi, &rtp.vertex_coords);
                     let mut intersect = face.intersect_line_with_face(x, dir)?;
@@ -164,7 +161,7 @@ impl ChainContext {
                     self.isimplex = neigh_idx;
                 } else {
                     return Err(RTCError::NotFound);
-                };
+                }
             } else {
                 following_single_chain = false;
             }
@@ -192,7 +189,7 @@ impl ChainContext {
                 status = self.build_ray_cell_chain(x, dir, rtp, simplices)?;
             } else {
                 return Err(RTCError::NotFound);
-            };
+            }
 
             i += 1;
         }
@@ -321,7 +318,7 @@ impl Face {
             }
         }
         for (i, _) in vs.iter().enumerate().take(N_DIMS - 1) {
-            for di in 0..N_DIMS {
+            for (di, _) in vs.iter().enumerate().take(N_DIMS) {
                 facebasis.axes[i][di] = vs[i][di];
             }
             for j in 0..i {
@@ -349,7 +346,7 @@ impl Face {
         for vi in 1..nvertices {
             for ddi in 0..N_DIMS - 1 {
                 let mut dotval = 0.0;
-                for di in 0..N_DIMS {
+                for (di, _) in vs.iter().enumerate().take(N_DIMS) {
                     dotval += vs[vi - 1][di] * facebasis.axes[ddi][di];
                 }
                 facebasis.r[vi][ddi] = dotval;
@@ -666,12 +663,12 @@ fn calc_grid_cont_dust_opacity(
     gp: &mut [Grid],
     par: &ParameterInput,
     freq: f64,
-    lam_kap: &Option<(RVector, RVector)>,
+    lam_kap: Option<&LamKap>,
 ) -> Result<()> {
     let kappa = if par.dust_file.is_none() {
         RVector::from_elem(1, 0.0)
-    } else if let Some((lam, kap)) = lam_kap {
-        RVector::from_elem(1, interpolate_kappa(freq, &lam.view(), &kap.view())?)
+    } else if let Some(lk) = lam_kap {
+        RVector::from_elem(1, interpolate_kappa(freq, &lk.lam.view(), &lk.kap.view())?)
     } else {
         RVector::from_elem(1, 0.0)
     };
@@ -681,7 +678,7 @@ fn calc_grid_cont_dust_opacity(
     let freqs = RVector::from_elem(1, 0.0);
 
     for gpi in gp.iter_mut().take(par.ncell) {
-        let gas_to_dust_ratio: f64 = todo!();
+        let gas_to_dust_ratio: f64 = 0.0; // TODO
         let t_kelvin = get_dust_temp(&gpi.t);
         let dtg = get_dtg(par, &gpi.dens.view(), gas_to_dust_ratio);
         calc_dust_data(
@@ -796,10 +793,11 @@ fn line_plane_intersect(
             dx[0] * grid.dir[i].x[0] + dx[1] * grid.dir[i].x[1] + dx[2] * grid.dir[i].x[2];
         if denominator.abs() > 0.0 {
             let newdist = numerator / denominator;
-            if newdist < ds && newdist > cutoff {
-                if let Some(neigh) = &grid.neigh[i] {
-                    return (newdist, neigh.id as usize);
-                }
+            if newdist < ds
+                && newdist > cutoff
+                && let Some(neigh) = &grid.neigh[i]
+            {
+                return (newdist, neigh.id as usize);
             }
         }
     }
@@ -831,7 +829,7 @@ fn trace_ray(
 ) -> Result<(), RTCError> {
     const N_STEPS_THROUGH_CELL: usize = 10;
     const N_STEPS_INV: f64 = 1.0 / (N_STEPS_THROUGH_CELL as f64);
-    let mut projection_velocities = RVector::zeros(N_STEPS_THROUGH_CELL);
+    let projection_velocities = RVector::zeros(N_STEPS_THROUGH_CELL);
 
     let cutoff = par.min_scale * 1.0e-7;
     let xp = ray.x;
@@ -880,7 +878,7 @@ fn trace_ray(
             }
         } else if img.do_line && par.use_vel_func_in_raytrace {
             for i in 0..N_STEPS_THROUGH_CELL {
-                let d = i as f64 * ds * N_STEPS_INV;
+                let _ = i as f64 * ds * N_STEPS_INV;
                 // let vel = velocity(x[0] + (dx[0] * d), x[1] + (dx[1] * d), x[2] + (dx[2] * d));
                 // projection_velocities[i] = dx.dot(&vel);
             }
@@ -936,7 +934,7 @@ fn trace_ray(
                                     );
                                 } else {
                                     return Err(RTCError::EmptyGrid);
-                                };
+                                }
                             }
                         }
                     }
@@ -998,9 +996,9 @@ fn do_barycentric_interpolation(
     par: &ParameterInput,
     gis: &[usize; 3],
     intersect: &Intersect,
-    x_cmpts_ray: RVector,
+    x_cmpts_ray: &RVector,
 ) {
-    gip.x_component_ray = intersect.bary.dot(&x_cmpts_ray);
+    gip.x_component_ray = intersect.bary.dot(x_cmpts_ray);
     for di in 0..N_DIMS {
         let vals: RVector = gis.iter().map(|&i| gp[i].x[di]).collect();
         gip.x[di] = vals.dot(&intersect.bary);
@@ -1125,7 +1123,7 @@ fn do_barycentric_interpolation_vel<const N_DIMS: usize>(
 fn do_barycentric_interpolations_vel<const N_DIMS: usize, const SAMPLES: usize>(
     buffer: &mut BaryVelocityBuffer,
     ray_velocities: &mut [RVector; SAMPLES],
-    do_ray: &[bool; 3],
+    do_ray: [bool; 3],
 ) -> Result<(), RTCError> {
     for i in 0..3 {
         if do_ray[i] {
@@ -1213,21 +1211,30 @@ fn trace_ray_smooth(
     }
 
     let status = follow_ray_through_cells(N_DIMS, &x, &dir, rtp)?;
-    let (entry_intersect_first_cell, chain_cell_ids, exit_intersects, len_chain_ptrs) = match status
-    {
-        RTCResult::Success {
-            entry_intersect_first_cell,
-            chain_cell_ids,
-            exit_intersects,
-            len_chain_ptrs,
-        } => (
-            entry_intersect_first_cell,
-            chain_cell_ids,
-            exit_intersects,
-            len_chain_ptrs,
-        ),
-        _ => return Ok(()),
+    let RTCResult::Success {
+        entry_intersect_first_cell,
+        chain_cell_ids,
+        exit_intersects,
+        len_chain_ptrs,
+    } = status
+    else {
+        return Ok(());
     };
+    // let (entry_intersect_first_cell, chain_cell_ids, exit_intersects, len_chain_ptrs) = match status
+    // {
+    //     RTCResult::Success {
+    //         entry_intersect_first_cell,
+    //         chain_cell_ids,
+    //         exit_intersects,
+    //         len_chain_ptrs,
+    //     } => (
+    //         entry_intersect_first_cell,
+    //         chain_cell_ids,
+    //         exit_intersects,
+    //         len_chain_ptrs,
+    //     ),
+    //     _ => return Ok(()),
+    // };
 
     let mut gis = [[0; N_VERT_PER_FACE]; 2];
 
@@ -1295,7 +1302,7 @@ fn trace_ray_smooth(
 
     for vi in 0..N_VERT_PER_FACE {
         let mut gpis = Vec::with_capacity(N_DIMS);
-        for val in gp[gis[entry_index][vi]].x.iter() {
+        for val in &gp[gis[entry_index][vi]].x {
             gpis.push(*val);
         }
         let gpis = RVector::from_vec(gpis);
@@ -1309,7 +1316,7 @@ fn trace_ray_smooth(
         par,
         &gis[entry_index],
         &entry_intersect_first_cell,
-        RVector::from_vec(x_components_ray),
+        &RVector::from_vec(x_components_ray),
     );
 
     let mut do_ray = [true; NUM_RAY_INTERP_SAMPLE];
@@ -1331,7 +1338,7 @@ fn trace_ray_smooth(
 
         for vi in 0..N_VERT_PER_FACE {
             let mut gpis = Vec::with_capacity(N_DIMS);
-            for val in gp[gis[exit_index][vi]].x.iter() {
+            for val in &gp[gis[exit_index][vi]].x {
                 gpis.push(*val);
             }
             let gpis = RVector::from_vec(gpis);
@@ -1344,102 +1351,102 @@ fn trace_ray_smooth(
             par,
             &gis[exit_index],
             &exit_intersects[ci],
-            RVector::from_vec(x_components_ray),
+            &RVector::from_vec(x_components_ray),
         );
 
         let mut projection_vel_old = 0.0;
         let mut projection_vel_offset = 0.0;
         let mut projection_vel_new = 0.0;
-        let mut projection_vel_ray = 0.0;
+        let projection_vel_ray = 0.0;
 
-        if img.do_line && img.do_interpolate_vels {
-            if let Some(ref mut buffer) = vel_buffer {
-                for vi in 0..buffer.num_vertices {
-                    let gi = rtp.simplices[dci].vertex[vi];
-                    for di in 0..N_DIMS {
-                        buffer.vertex_velocities[vi][di] = gp[gi].vel[di];
+        if img.do_line
+            && img.do_interpolate_vels
+            && let Some(ref mut buffer) = vel_buffer
+        {
+            for vi in 0..buffer.num_vertices {
+                let gi = rtp.simplices[dci].vertex[vi];
+                for di in 0..N_DIMS {
+                    buffer.vertex_velocities[vi][di] = gp[gi].vel[di];
+                }
+            }
+            for ei in 0..buffer.num_edges {
+                let gi0 = rtp.simplices[dci].vertex[buffer.edge_vertex_indices[ei][0]];
+                let gi1 = rtp.simplices[dci].vertex[buffer.edge_vertex_indices[ei][1]];
+                let mut neighbor_not_found = true;
+                let mut edge_index = 0;
+                for k in 0..gp[gi0].num_neigh {
+                    if let Some(neigh) = &gp[gi0].neigh[k]
+                        && neigh.id == gi1 as i32
+                    {
+                        neighbor_not_found = false;
+                        edge_index = k;
+                        break;
                     }
                 }
-                for ei in 0..buffer.num_edges {
-                    let gi0 = rtp.simplices[dci].vertex[buffer.edge_vertex_indices[ei][0]];
-                    let gi1 = rtp.simplices[dci].vertex[buffer.edge_vertex_indices[ei][1]];
-                    let mut neighbor_not_found = true;
-                    let mut edge_index = 0;
-                    for k in 0..gp[gi0].num_neigh {
-                        if let Some(neigh) = &gp[gi0].neigh[k] {
-                            if neigh.id == gi1 as i32 {
-                                neighbor_not_found = false;
-                                edge_index = k;
-                                break;
-                            }
-                        }
-                    }
-                    if neighbor_not_found {
-                        return Err(RTCError::NeighborNotFound);
-                    }
-                    for di in 0..N_DIMS {
-                        buffer.edge_velocities[ei][di] = gp[gi0].v2[3 * edge_index + di];
-                    }
+                if neighbor_not_found {
+                    return Err(RTCError::NeighborNotFound);
                 }
-                if ci == 0 {
-                    let mut vvi = 0;
-                    for vi in 0..buffer.num_vertices {
-                        if vi == entry_intersect_first_cell.fi {
-                            buffer.entry_cell_bary[vi] = 0.0;
-                        } else {
-                            buffer.entry_cell_bary[vi] = entry_intersect_first_cell.bary[vvi];
-                            vvi += 1;
-                        }
-                    }
-                    do_ray[0] = true;
-                    do_ray[1] = true;
-                    do_ray[2] = true;
-                } else {
-                    let mut vvi = 0;
-                    for vi in 0..buffer.num_vertices {
-                        if vi == inter_cell_keys[ci - 1].fi_entered_cell as usize {
-                            buffer.entry_cell_bary[vi] = 0.0;
-                        } else {
-                            buffer.entry_cell_bary[vi] = exit_intersects[ci - 1].bary
-                                [inter_cell_keys[ci - 1].exited_face_ids[vvi]];
-                            vvi += 1;
-                        }
-                    }
-                    do_ray[0] = false;
-                    do_ray[1] = true;
-                    do_ray[2] = true;
-                    for di in 0..N_DIMS {
-                        ray_velocities[0][di] = ray_velocities[1][di];
-                    }
+                for di in 0..N_DIMS {
+                    buffer.edge_velocities[ei][di] = gp[gi0].v2[3 * edge_index + di];
                 }
+            }
+            if ci == 0 {
                 let mut vvi = 0;
                 for vi in 0..buffer.num_vertices {
-                    if vi == exit_intersects[ci].fi {
-                        buffer.exit_cell_bary[vi] = 0.0;
+                    if vi == entry_intersect_first_cell.fi {
+                        buffer.entry_cell_bary[vi] = 0.0;
                     } else {
-                        buffer.exit_cell_bary[vi] = exit_intersects[ci].bary[vvi];
+                        buffer.entry_cell_bary[vi] = entry_intersect_first_cell.bary[vvi];
                         vvi += 1;
                     }
-                    buffer.mid_cell_bary[vi] =
-                        0.5 * (buffer.entry_cell_bary[vi] + buffer.exit_cell_bary[vi]);
                 }
-                do_barycentric_interpolations_vel::<N_DIMS, N_VERT_PER_FACE>(
-                    buffer,
-                    &mut ray_velocities,
-                    &do_ray,
-                )?;
-                for i in 0..NUM_RAY_INTERP_SAMPLE {
-                    projection_ray_velocities[i] = dir.dot(&ray_velocities[i]);
+                do_ray[0] = true;
+                do_ray[1] = true;
+                do_ray[2] = true;
+            } else {
+                let mut vvi = 0;
+                for vi in 0..buffer.num_vertices {
+                    if vi == inter_cell_keys[ci - 1].fi_entered_cell as usize {
+                        buffer.entry_cell_bary[vi] = 0.0;
+                    } else {
+                        buffer.entry_cell_bary[vi] = exit_intersects[ci - 1].bary
+                            [inter_cell_keys[ci - 1].exited_face_ids[vvi]];
+                        vvi += 1;
+                    }
                 }
-                projection_vel_old =
-                    do_segment_interpolation_scalar(&projection_ray_velocities, 0.0);
-                let projection_vel_second_deriv = (projection_ray_velocities[0]
-                    + projection_ray_velocities[1]
-                    - 2.0 * projection_ray_velocities[2])
-                    * 4.0;
-                projection_vel_offset =
-                    -projection_vel_second_deriv * N_SEGMENTS_INV * N_SEGMENTS_INV / 6.0;
+                do_ray[0] = false;
+                do_ray[1] = true;
+                do_ray[2] = true;
+                for di in 0..N_DIMS {
+                    ray_velocities[0][di] = ray_velocities[1][di];
+                }
             }
+            let mut vvi = 0;
+            for vi in 0..buffer.num_vertices {
+                if vi == exit_intersects[ci].fi {
+                    buffer.exit_cell_bary[vi] = 0.0;
+                } else {
+                    buffer.exit_cell_bary[vi] = exit_intersects[ci].bary[vvi];
+                    vvi += 1;
+                }
+                buffer.mid_cell_bary[vi] =
+                    0.5 * (buffer.entry_cell_bary[vi] + buffer.exit_cell_bary[vi]);
+            }
+            do_barycentric_interpolations_vel::<N_DIMS, N_VERT_PER_FACE>(
+                buffer,
+                &mut ray_velocities,
+                do_ray,
+            )?;
+            for i in 0..NUM_RAY_INTERP_SAMPLE {
+                projection_ray_velocities[i] = dir.dot(&ray_velocities[i]);
+            }
+            projection_vel_old = do_segment_interpolation_scalar(&projection_ray_velocities, 0.0);
+            let projection_vel_second_deriv = (projection_ray_velocities[0]
+                + projection_ray_velocities[1]
+                - 2.0 * projection_ray_velocities[2])
+                * 4.0;
+            projection_vel_offset =
+                -projection_vel_second_deriv * N_SEGMENTS_INV * N_SEGMENTS_INV / 6.0;
         }
         let ds =
             (gips[exit_index].x_component_ray - gips[entry_index].x_component_ray) * N_SEGMENTS_INV;
@@ -1534,10 +1541,6 @@ fn trace_ray_smooth(
     Ok(())
 }
 
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::similar_names)]
-#[allow(clippy::cast_precision_loss)]
-#[allow(clippy::cast_sign_loss)]
 fn locate_ray_on_image(
     x: &[f64; 2],
     size: f64,
@@ -1633,8 +1636,8 @@ fn convert_cell_to_simplex(cells: &[Cell], par: &ParameterInput, gp: &[Grid]) ->
             ..Default::default()
         };
 
-        for vi in 0..N_DIMS + 1 {
-            simplex.vertex[vi] = cell.vertex[vi].as_ref().map(|grid| grid.id).unwrap_or(0) as usize;
+        for vi in 0..=N_DIMS {
+            simplex.vertex[vi] = cell.vertex[vi].as_ref().map_or(0, |grid| grid.id) as usize;
 
             let gi = simplex.vertex[vi];
             for di in 0..N_DIMS {
@@ -1651,7 +1654,7 @@ fn convert_cell_to_simplex(cells: &[Cell], par: &ParameterInput, gp: &[Grid]) ->
 
     // Step 2: Assign neighbor indices
     for (icell, cell) in cells.iter().enumerate() {
-        for vi in 0..N_DIMS + 1 {
+        for vi in 0..=N_DIMS {
             match cell.neigh[vi] {
                 Some(neighbor_cell_index) => {
                     simplices[icell].neigh[vi] = Some(neighbor_cell_index);
@@ -1684,7 +1687,7 @@ fn get_2d_cells(rays: &[RayData], num_active_rays: usize) -> Result<Vec<Simplex>
         .scale_last(true)
         .triangulate(true)
         .build_managed(N_DIMS, pt_array)
-        .map_err(|e| anyhow!("Failed to build Qhull: {:?}", e))?;
+        .map_err(|e| anyhow!("Failed to build Qhull: {e:?}"))?;
 
     let mut num_cells: usize = 0;
     for facet in qh.all_facets() {
@@ -1787,7 +1790,7 @@ fn prepare_raytrace(gp: &mut [Grid], par: &ParameterInput) -> Result<Option<RTPr
             }
             DelaunayResult::NoCells => Ok(None),
         },
-        _ => Ok(None),
+        RayTraceAlgorithm::Legacy => Ok(None),
     }
 }
 
@@ -1796,14 +1799,14 @@ pub fn raytrace(
     gp: &mut [Grid],
     par: &ParameterInput,
     mol_data: &[MolData],
-    lam_kap: &Option<(RVector, RVector)>,
+    lam_kap: Option<&LamKap>,
 ) -> Result<(), RTCError> {
     const MAX_NUM_RAYS_PER_PIXEL: usize = 20;
     const NUM_INTERP_PTS: usize = 3;
     const MIN_NUM_RAYS_FOR_AVERAGE: usize = 2;
 
     let pixel_size = img.distance * img.img_res;
-    let tot_n_img_pxls = (img.pxls * img.pxls) as usize;
+    let tot_n_img_pxls = img.pxls * img.pxls;
     let img_centre_x_pxls = img.pxls as f64 / 2.0;
     let img_centre_y_pxls = img.pxls as f64 / 2.0;
 
@@ -1845,7 +1848,7 @@ pub fn raytrace(
             }
             (cmb_mol_i, cmb_line_i)
         };
-        mol_data[cmb_mol_i].freq[cmb_line_i as usize]
+        mol_data[cmb_mol_i].freq[cmb_line_i]
     } else {
         img.freq
     };
@@ -1873,7 +1876,7 @@ pub fn raytrace(
     }
     let num_circle_rays = if num_pts_in_annulus > 0 {
         let circle_spacing =
-            (1.0 / 6.0) * par.radius * (5.0 * PI / num_pts_in_annulus as f64).sqrt();
+            (1.0 / 6.0) * par.radius * (5.0 * PI / f64::from(num_pts_in_annulus)).sqrt();
         (2.0 * PI * par.radius / circle_spacing) as usize
     } else {
         0
@@ -1980,8 +1983,8 @@ pub fn raytrace(
     let mut triangle = [[0.0; 2]; 3];
 
     if num_pixels_for_interp > 0 {
-        let mut raster_cell_ids = UVector::zeros(img.pxls as usize);
-        let mut raster_pixel_is_in_cells: Vec<bool> = Vec::with_capacity(img.pxls as usize);
+        let mut raster_cell_ids = UVector::zeros(img.pxls);
+        let mut raster_pixel_is_in_cells: Vec<bool> = Vec::with_capacity(img.pxls);
         let mut grid_2d_coords = RVector::zeros(2 * rays.len());
         for (ri, _) in rays.iter().enumerate() {
             grid_2d_coords[ri * 2] = rays[ri].x;
@@ -1997,27 +2000,36 @@ pub fn raytrace(
             let x = pixel_size * (0.5 + xi as f64 - img_centre_x_pxls);
             raster_starts[0] = x;
             for yi in 0..img.pxls {
-                raster_pixel_is_in_cells[yi as usize] = false;
-                raster_cell_ids[yi as usize] = 0;
+                raster_pixel_is_in_cells[yi] = false;
+                raster_cell_ids[yi] = 0;
             }
             let status = follow_ray_through_cells(2, &raster_starts, &raster_dirs, &rtp)?;
-            let (entry_intersect_first_cell, chain_cell_ids, exit_intersects, len_chain_ptrs) =
-                match status {
-                    RTCResult::Success {
-                        entry_intersect_first_cell,
-                        chain_cell_ids,
-                        exit_intersects,
-                        len_chain_ptrs,
-                    } => (
-                        entry_intersect_first_cell,
-                        chain_cell_ids,
-                        exit_intersects,
-                        len_chain_ptrs,
-                    ),
-                    _ => {
-                        continue;
-                    }
-                };
+            let RTCResult::Success {
+                entry_intersect_first_cell,
+                chain_cell_ids,
+                exit_intersects,
+                len_chain_ptrs,
+            } = status
+            else {
+                continue;
+            };
+            // let (entry_intersect_first_cell, chain_cell_ids, exit_intersects, len_chain_ptrs) =
+            //     match status {
+            //         RTCResult::Success {
+            //             entry_intersect_first_cell,
+            //             chain_cell_ids,
+            //             exit_intersects,
+            //             len_chain_ptrs,
+            //         } => (
+            //             entry_intersect_first_cell,
+            //             chain_cell_ids,
+            //             exit_intersects,
+            //             len_chain_ptrs,
+            //         ),
+            //         _ => {
+            //             continue;
+            //         }
+            //     };
             let mut start_yi = img.pxls; // default
             for yi in 0..img.pxls {
                 let delta_y = pixel_size * yi as f64;
@@ -2035,17 +2047,17 @@ pub fn raytrace(
                 if si >= len_chain_ptrs {
                     break;
                 }
-                raster_cell_ids[yi as usize] = chain_cell_ids[si];
-                raster_pixel_is_in_cells[yi as usize] = true;
+                raster_cell_ids[yi] = chain_cell_ids[si];
+                raster_pixel_is_in_cells[yi] = true;
             }
             for yi in 0..img.pxls {
                 let ppi = yi * img.pxls + xi;
-                if img.pixel[ppi as usize].num_rays >= MIN_NUM_RAYS_FOR_AVERAGE {
+                if img.pixel[ppi].num_rays >= MIN_NUM_RAYS_FOR_AVERAGE {
                     continue;
                 }
                 let y = pixel_size * (0.5 + yi as f64 - img_centre_y_pxls);
-                if raster_pixel_is_in_cells[yi as usize] {
-                    let dci = raster_cell_ids[yi as usize];
+                if raster_pixel_is_in_cells[yi] {
+                    let dci = raster_cell_ids[yi];
                     for vi in 0..3 {
                         gis[vi] = rtp.simplices[dci].vertex[vi];
                         triangle[vi][0] = rays[gis[vi]].x;
@@ -2055,9 +2067,9 @@ pub fn raytrace(
                     for ichan in 0..img.nchan {
                         let vals_intensity: RVector =
                             gis.iter().map(|&i| rays[i].intensity[ichan]).collect();
-                        img.pixel[ppi as usize].intense[ichan] += vals_intensity.dot(&barys);
+                        img.pixel[ppi].intense[ichan] += vals_intensity.dot(&barys);
                         let vals_tau: RVector = gis.iter().map(|&i| rays[i].tau[ichan]).collect();
-                        img.pixel[ppi as usize].tau[ichan] += vals_tau.dot(&barys);
+                        img.pixel[ppi].tau[ichan] += vals_tau.dot(&barys);
                     }
                 }
             }

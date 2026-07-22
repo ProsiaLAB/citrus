@@ -1,21 +1,19 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::mem;
-use std::num::ParseFloatError;
 
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use planetes_ext::types::RVector;
 use qhull::QhBuilder;
 use rand::rngs::StdRng;
-use rand::{Rng, RngExt, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 use crate::config::ParameterInput;
 use crate::constants;
 use crate::constants::N_DIMS;
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
-use crate::utils;
 
 #[derive(Default)]
 pub struct Point {
@@ -125,6 +123,10 @@ pub fn set_default_grid(num_points: usize, num_species: usize) -> Vec<Grid> {
     gp
 }
 
+/// Pre-define the grid
+///
+/// # Errors
+/// This function may fail if the configuration is invalid.
 pub fn pre_define(par: &mut ParameterInput, gp: &mut Vec<Grid>) -> Result<()> {
     let mut rand_gen = if true {
         // Use fixed seed for reproducibility
@@ -255,7 +257,7 @@ pub fn pre_define(par: &mut ParameterInput, gp: &mut Vec<Grid>) -> Result<()> {
      * all the non-sink points still have IDs lower than par->pIntensity.
      */
 
-    let n_extra_sinks = reorder_grid(gp, par.ncell)?;
+    let n_extra_sinks = reorder_grid(gp, par.ncell);
     par.p_intensity -= n_extra_sinks as usize;
     par.p_intensity += n_extra_sinks as usize;
 
@@ -268,6 +270,10 @@ pub fn pre_define(par: &mut ParameterInput, gp: &mut Vec<Grid>) -> Result<()> {
     Ok(())
 }
 
+/// Read or build the grid
+///
+/// # Errors
+/// This function may fail if the configuration is invalid.
 pub fn read_or_build_grid(par: &mut ParameterInput) -> Result<Vec<Grid>> {
     if par.grid_in_file.is_some() {
         read_grid_init(par);
@@ -325,7 +331,7 @@ fn check_grid_densities(gp: &[Grid], par: &ParameterInput) {
             warning_already_issued = true;
             let msg = "WARNING: You have a grid point with a density lower than the typical ISM density. \
             This may cause numerical issues. Please check your input file.";
-            eprintln!("{}", msg);
+            eprintln!("{msg}");
         }
     }
 }
@@ -356,6 +362,12 @@ fn check_grid_densities(gp: &[Grid], par: &ParameterInput) {
 ///                 .id
 ///                 .neigh
 ///                 .vertx
+///
+/// # Errors
+/// This function may fail if the configuration is invalid.
+///
+/// # Panics
+/// This function may panic if the model is invalid.
 pub fn delaunay(
     gp: &mut [Grid],
     num_points: usize,
@@ -375,7 +387,7 @@ pub fn delaunay(
         .scale_last(true)
         .triangulate(true)
         .build_managed(N_DIMS, pt_array)
-        .map_err(|e| anyhow!("Failed to build Qhull: {:?}", e))?;
+        .map_err(|e| anyhow!("Failed to build Qhull: {e:?}"))?;
 
     let mut indices: Vec<usize> = Vec::new();
 
@@ -407,7 +419,7 @@ pub fn delaunay(
         }
     }
 
-    for &index in indices.iter() {
+    for &index in &indices {
         gp[index].sink = true;
     }
 
@@ -456,7 +468,7 @@ pub fn delaunay(
                     }
                 }
             }
-            for i in 0..N_DIMS + 1 {
+            for i in 0..=N_DIMS {
                 let id_i = point_ids_this_facet[i];
                 for (j, &id_j) in point_ids_this_facet.iter().enumerate().take(N_DIMS + 1) {
                     if i != j {
@@ -465,11 +477,10 @@ pub fn delaunay(
                             match gp[id_i].neigh[k] {
                                 Some(ref neigh_grid) => {
                                     let grid_id_j = gp[id_j].id;
-                                    if neigh_grid.id != grid_id_j {
-                                        k += 1;
-                                    } else {
+                                    if neigh_grid.id == grid_id_j {
                                         break;
                                     }
+                                    k += 1;
                                 }
                                 None => {
                                     bail!(
@@ -541,7 +552,7 @@ pub fn delaunay(
 /// 'down', the points are swapped. This is just a tiny bit tricky because we also
 /// need to make sure all the neigh pointers are swapped. That's why we make an
 /// ordered list of indices and perform the swaps on that as well.
-fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32> {
+fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> i32 {
     let mut n_extra_sinks = 0;
     let mut indices: Vec<usize> = vec![0; num_points];
 
@@ -603,7 +614,7 @@ fn reorder_grid(gp: &mut Vec<Grid>, num_points: usize) -> Result<i32> {
         }
     }
 
-    Ok(n_extra_sinks)
+    n_extra_sinks
 }
 
 /// Calculate the distance between grid points
@@ -656,7 +667,7 @@ fn write_vtk_unstructured_points(gp: &[Grid], par: &ParameterInput) -> Result<()
         }
     }
 
-    let mut file = File::create(&par.grid_file.as_ref().unwrap())?;
+    let mut file = File::create(par.grid_file.as_ref().unwrap())?;
 
     // Write the VTK header
     writeln!(file, "# vtk DataFile Version 3.0")?;
@@ -678,7 +689,7 @@ fn write_vtk_unstructured_points(gp: &[Grid], par: &ParameterInput) -> Result<()
         .scale_last(true)
         .is_tracing(0)
         .build_managed(N_DIMS, pt_array)
-        .map_err(|e| anyhow!("Failed to build Qhull: {:?}", e))?;
+        .map_err(|e| anyhow!("Failed to build Qhull: {e:?}"))?;
 
     let mut l: usize = 0;
 
@@ -699,7 +710,7 @@ fn write_vtk_unstructured_points(gp: &[Grid], par: &ParameterInput) -> Result<()
                 let point_id = vertex.point_id(&qh);
                 match point_id {
                     Ok(point_id) => {
-                        writeln!(file, "{} ", point_id)?;
+                        writeln!(file, "{point_id} ")?;
                     }
                     Err(_) => {
                         bail!("Failed to get point ID");
@@ -709,7 +720,7 @@ fn write_vtk_unstructured_points(gp: &[Grid], par: &ParameterInput) -> Result<()
         }
     }
 
-    writeln!(file, "CELL_TYPES {}", l)?;
+    writeln!(file, "CELL_TYPES {l}")?;
     for _ in 0..l {
         writeln!(file, "10")?;
     }

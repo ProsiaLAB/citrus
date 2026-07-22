@@ -76,6 +76,7 @@ fn stokes_angles(mag_field: &RVector, rotation_matrix: &RMatrix) -> Result<RVect
     Ok(trig_fncs)
 }
 
+#[must_use]
 pub fn source_fn_line(
     mol: &Populations,
     mol_data: &MolData,
@@ -95,6 +96,7 @@ pub fn source_fn_line(
     )
 }
 
+#[must_use]
 pub fn source_fn_cont(jnu: f64, alpha: f64, cont: &ContinuumLine) -> (f64, f64) {
     (jnu + cont.dust * cont.knu, alpha + cont.knu)
 }

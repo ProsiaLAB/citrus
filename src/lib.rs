@@ -9,6 +9,21 @@
 //!
 //! For a detailed theoretical description of the code, please read the [book](https://planeteslab.github.io/books/citrus/).
 
+#![allow(clippy::struct_excessive_bools)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::excessive_precision)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::items_after_statements)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::many_single_char_names)]
+
 pub mod collparts;
 pub mod config;
 pub mod constants;

@@ -563,6 +563,7 @@ pub enum SamplingAlgorithm {
 }
 
 impl SamplingAlgorithm {
+    #[must_use]
     pub fn is_legacy(&self) -> bool {
         !matches!(self, SamplingAlgorithm::Modern(_))
     }
@@ -796,6 +797,10 @@ pub struct Config {
 }
 
 impl Config {
+    /// Load the configuration from a file
+    ///
+    /// # Errors
+    /// This function may fail if the file cannot be read or if the configuration is invalid.
     pub fn from_path(path: &str) -> Result<Self> {
         let content = fs::read_to_string(path)?; // Propagate file read errors
         let config: Config = toml::from_str(&content)?; // Propagate config parsing errors
@@ -803,9 +808,14 @@ impl Config {
     }
 
     /// Parse the configuration for correctness and consistency
+    ///
+    /// # Errors
+    /// This function may fail if the configuration is invalid.
+    ///
+    /// # Panics
+    /// This function may panic if the model is invalid.
     pub fn parse<M: Model>(&mut self, model: &M) -> Result<()> {
         let mut r = Vec3::zero();
-        let mut temp_point_density = 0.0;
 
         self.parameters.ncell = self.parameters.p_intensity + self.parameters.n_sink_points;
         self.parameters.radius_squ = self.parameters.radius * self.parameters.radius;
@@ -854,7 +864,7 @@ impl Config {
         // Not sure this is needed?
         self.parameters.grid_density_global_max = 1.0;
 
-        temp_point_density = model.grid_density(&self.parameters, &r);
+        let mut temp_point_density = model.grid_density(&self.parameters, &r);
 
         if temp_point_density.is_infinite() || temp_point_density.is_nan() {
             eprintln!("There is a singularity in the grid density function at the origin.");
@@ -890,7 +900,7 @@ impl Config {
                 };
                 println!("Random number generator initialized.");
                 let mut found_good_value = false;
-                for j in 0..100 {
+                for _ in 0..100 {
                     // TODO: Better way to do this?
                     r.x = rand_gen.random_range(-self.parameters.radius..self.parameters.radius);
                     r.y = rand_gen.random_range(-self.parameters.radius..self.parameters.radius);
@@ -913,13 +923,12 @@ impl Config {
                 } else if let SamplingAlgorithm::Modern(grid_density_maxima) =
                     &self.parameters.sampling_algorithm
                 {
-                    if grid_density_maxima.is_empty() {
-                        panic!(
-                            "Could not find a non-pathological grid density value, and no grid density maxima were provided to guide the sampling algorithm."
-                        );
-                    }
+                    assert!(
+                        !grid_density_maxima.is_empty(),
+                        "Could not find a non-pathological grid density value, and no grid density maxima were provided to guide the sampling algorithm."
+                    );
 
-                    for m in grid_density_maxima.iter() {
+                    for m in grid_density_maxima {
                         if m.value > self.parameters.grid_density_global_max {
                             self.parameters.grid_density_global_max = m.value;
                         }
@@ -970,9 +979,10 @@ impl Config {
                 } else {
                     image.nchan = 1;
                 }
-                if image.freq == 0.0 {
-                    panic!("You must set a frequency for continuum image.");
-                }
+                assert!(
+                    image.freq != 0.0,
+                    "You must set a frequency for continuum image."
+                );
                 if image.trans.is_some() || image.bandwidth > 0.0 {
                     eprintln!(
                         "Transition number and bandwidth are not relevant for a continuum image. They will be ignored."
@@ -1016,7 +1026,7 @@ impl Config {
                             "WARNING: Image {i} did not have ``mol_i`` set, \
                                 Therefore, first molecule will be used.",
                         );
-                        eprintln!("{}", msg);
+                        eprintln!("{msg}");
                         image.mol_i = 0;
                     }
                 } else if image.freq < 0.0 {
@@ -1038,7 +1048,7 @@ impl Config {
             }
             image.img_res = (image.img_res / 3600.0).to_radians();
             image.pixel = {
-                let mut v = Vec::with_capacity((image.pxls * image.pxls) as usize);
+                let mut v = Vec::with_capacity(image.pxls * image.pxls);
                 for _ in 0..(image.pxls * image.pxls) {
                     v.push(Spec::default());
                 }
@@ -1138,7 +1148,7 @@ impl Config {
         self.parameters.n_cont_images = 0;
         self.parameters.do_interpolate_vels = false;
 
-        for image in self.images.iter_mut() {
+        for image in &mut self.images {
             if image.do_line {
                 self.parameters.n_line_images += 1;
             } else {
@@ -1158,11 +1168,11 @@ impl Config {
                         match fs::metadata(path) {
                             Ok(metadata) => {
                                 if metadata.len() == 0 {
-                                    eprintln!("File {} is empty.", dust);
+                                    eprintln!("File {dust} is empty.");
                                 }
                             }
                             Err(err) => {
-                                eprintln!("Error accessing file {}: {}", dust, err);
+                                eprintln!("Error accessing file {dust}: {err}");
                             }
                         }
                     }
@@ -1183,28 +1193,26 @@ impl Config {
             if self.parameters.n_solve_iters > 0 {
                 let msg = "Requesting `n_solve_iters > 0` in LTE only mode \
             will have no effect";
-                eprintln!("{}", msg);
+                eprintln!("{msg}");
             } else if self.parameters.n_solve_iters <= self.parameters.n_solve_iters_done {
                 let msg = "Requesting `n_solve_iters <= n_solve_iters_done` in LTE only mode \
             will have no effect";
-                eprintln!("{}", msg);
+                eprintln!("{msg}");
             }
         }
 
-        let mol_data: Option<MolData> = if self.parameters.n_species > 0 {
+        let _mol_data: Option<MolData> = if self.parameters.n_species > 0 {
             // defaults::mol_data(self.parameters.n_species)
             todo!()
         } else {
             None
         };
 
-        let mut default_density_power: f64;
-
-        if self.parameters.sampling_algorithm.is_legacy() {
-            default_density_power = constants::DENSITY_EXP;
+        let _density_power = if self.parameters.sampling_algorithm.is_legacy() {
+            constants::DENSITY_EXP
         } else {
-            default_density_power = constants::TREE_EXP;
-        }
+            constants::TREE_EXP
+        };
 
         Ok(())
     }

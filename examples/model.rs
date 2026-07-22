@@ -97,11 +97,6 @@ fn main() -> Result<()> {
 
     dbg!("Loaded config: {:?}", &input_config);
 
-    engine::run(
-        Lime,
-        &mut input_config.parameters,
-        &mut input_config.images,
-        None,
-    )?;
+    engine::run(&mut input_config.parameters, &mut input_config.images, None)?;
     Ok(())
 }

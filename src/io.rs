@@ -6,7 +6,9 @@ use std::path::Path;
 use anyhow::Result;
 use planetes_ext::types::RVector;
 
-pub fn read_dust_file(filename: &str) -> Result<(RVector, RVector)> {
+use crate::engine::LamKap;
+
+pub fn read_dust_file(filename: &str) -> Result<LamKap> {
     let path = Path::new(filename);
     let file = File::open(path)?;
     let reader = BufReader::new(file);
@@ -23,5 +25,10 @@ pub fn read_dust_file(filename: &str) -> Result<(RVector, RVector)> {
         }
     }
 
-    Ok((RVector::from_vec(lam), RVector::from_vec(kap)))
+    let lam_kap = LamKap {
+        lam: RVector::from_vec(lam),
+        kap: RVector::from_vec(kap),
+    };
+
+    Ok(lam_kap)
 }
