@@ -1,6 +1,9 @@
 use planetes_ext::types::Vec3;
 
-use crate::config::{ParameterInput, SamplingAlgorithm};
+use crate::{
+    config::{ParameterInput, SamplingAlgorithm},
+    constants,
+};
 
 pub trait Model {
     fn density(&self, _point: &Vec3) -> f64 {
@@ -51,9 +54,9 @@ pub trait Model {
 
         let default_density_power = if matches!(par.sampling_algorithm, SamplingAlgorithm::Uniform)
         {
-            cc::DENSITY_POWER
+            constants::DENSITY_EXP
         } else {
-            cc::TREE_POWER
+            constants::TREE_EXP
         };
 
         total_density.powf(default_density_power) / par.grid_density_global_max

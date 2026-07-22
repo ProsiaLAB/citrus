@@ -1,3 +1,5 @@
+use std::f64::consts::PI;
+
 use anyhow::Result;
 use anyhow::bail;
 use codata as cc;
@@ -82,11 +84,12 @@ pub fn source_fn_line(
     jnu: f64,
     alpha: f64,
 ) -> (f64, f64) {
+    let hpip: f64 = cc::PLANCK_CONSTANT_SI * cc::SPEED_OF_LIGHT_IN_VACUUM_SI / 4.0 / PI / PI.sqrt();
     (
-        jnu + vfac * cc::HPIP * mol.spec_num_dens[mol_data.lau[linei]] * mol_data.aeinst[linei],
+        jnu + vfac * hpip * mol.spec_num_dens[mol_data.lau[linei]] * mol_data.aeinst[linei],
         alpha
             + vfac
-                * cc::HPIP
+                * hpip
                 * (mol.spec_num_dens[mol_data.lal[linei]] * mol_data.beinstl[linei]
                     - mol.spec_num_dens[mol_data.lau[linei]] * mol_data.beinstu[linei]),
     )

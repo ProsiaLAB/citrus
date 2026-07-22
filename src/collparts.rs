@@ -37,6 +37,7 @@ pub struct MolData {
 }
 
 impl MolData {
+    #[must_use]
     pub fn new() -> Self {
         MolData {
             amass: -1.0,
@@ -82,6 +83,9 @@ pub struct Rates {
 ///
 ///         * par->nMolWeights: this list gives the weights to be applied to the N
 /// density values when calculating molecular densities from abundances.
-pub fn check_user_density_weights(par: &mut ParameterInput) -> Result<()> {
+///
+/// # Errors
+/// TODO
+pub fn check_user_density_weights(_par: &mut ParameterInput) -> Result<()> {
     todo!()
 }

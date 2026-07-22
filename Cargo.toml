@@ -4,30 +4,25 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.103"
+anyhow = "1.0.104"
 blas-src = { version = "0.14.0", features = ["accelerate"] }
-codata = "0.2.0"
+codata = "0.2.1"
 fitsio = "0.21.10"
 ndarray = { version = "0.17.2", features = ["rayon", "serde", "blas"] }
 ndarray-linalg = "0.18.1"
-planetes-ext = { git = "https://github.com/PlanetesLAB/planetes-ext", features = [
+planetes-ext = { git = "https://github.com/PlanetesLAB/planetes-ext", tag = "v1.1.0", features = [
     "serde",
-], tag = "v0.2.0" }
-qhull-sys = { git = "https://github.com/PlanetesLAB/qhull-sys" }
-rand = "0.10.1"
+] }
+qhull = "0.4.0"
+rand = "0.10.2"
 rayon = "1.12.0"
-serde = { version = "1.0.228", features = ["derive"] }
-toml = "1.1.2+spec-1.1.0"
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.3"
 
 [build-dependencies]
 autotools = "0.2.7"
 
 [profile.release]
-lto = true                                                              # Link-time optimization
-codegen-units = 1                                                       # Slower build times, but more optimizationanyhow = "1.0.95"
-blas-src = { version = "0.11.1", features = ["accelerate"] }
-codata = "0.1.0"
-fitsio = "0.21.6"
-ndarray = { version = "0.16.1", features = ["rayon", "serde", "blas"] }
-ndarray-linalg = "0.17.0"
-opt-level = 3                                                           # Highest optimization level
+lto = true        # Link-time optimization
+codegen-units = 1 # Slower build times, but more optimizationanyhow = "1.0.95"
+opt-level = 3     # Highest optimization level

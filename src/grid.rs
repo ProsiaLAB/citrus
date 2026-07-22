@@ -6,10 +6,12 @@ use std::num::ParseFloatError;
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use planetes_ext::types::RVector;
+use qhull::QhBuilder;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{Rng, RngExt, SeedableRng};
 
 use crate::config::ParameterInput;
+use crate::constants;
 use crate::constants::N_DIMS;
 use crate::lines::ContinuumLine;
 use crate::pops::Populations;
@@ -127,11 +129,12 @@ pub fn pre_define(par: &mut ParameterInput, gp: &mut Vec<Grid>) -> Result<()> {
     let mut rand_gen = if true {
         // Use fixed seed for reproducibility
         // Note: SeedableRng::seed_from_u64 takes a u64 seed
-        StdRng::seed_from_u64(6611304)
+        StdRng::seed_from_u64(6_611_304)
     } else {
+        let mut thread_rng = rand::rng();
         // Seed from the system's entropy source for non-reproducible randomness
         // StdRng::from_entropy is a good way to get a random seed
-        StdRng::try_from_os_rng().expect("Failed to seed random number generator from entropy")
+        StdRng::from_rng(&mut thread_rng)
     };
     par.n_densities = 1;
     for dens in gp.iter_mut().map(|g| &mut g.dens) {
@@ -222,7 +225,7 @@ pub fn pre_define(par: &mut ParameterInput, gp: &mut Vec<Grid>) -> Result<()> {
                 bail!("No molecular data found");
             }
 
-            gp[i].dens[0] = cc::CITRUS_GLOBAL_EPS; // Assuming CITRUS_EPS is defined
+            gp[i].dens[0] = constants::CITRUS_GLOBAL_EPS; // Assuming CITRUS_EPS is defined
             gp[i].t[0] = par.cmb_temp;
             gp[i].t[1] = par.cmb_temp;
             gp[i].mag_field = RVector::zeros(3);
@@ -258,7 +261,7 @@ pub fn pre_define(par: &mut ParameterInput, gp: &mut Vec<Grid>) -> Result<()> {
 
     dist_calc(gp, par.ncell);
 
-    if !par.grid_file.is_empty() {
+    if par.grid_file.is_some() {
         write_vtk_unstructured_points(gp, par)?;
     }
 
@@ -266,7 +269,7 @@ pub fn pre_define(par: &mut ParameterInput, gp: &mut Vec<Grid>) -> Result<()> {
 }
 
 pub fn read_or_build_grid(par: &mut ParameterInput) -> Result<Vec<Grid>> {
-    if !par.grid_in_file.is_empty() {
+    if par.grid_in_file.is_some() {
         read_grid_init(par);
     }
 
@@ -318,7 +321,7 @@ fn check_grid_densities(gp: &[Grid], par: &ParameterInput) {
     let mut warning_already_issued = false;
 
     for (i, _) in gp.iter().enumerate().take(par.p_intensity) {
-        if !warning_already_issued && gp[i].dens[0] < cc::TYPICAL_ISM_DENS {
+        if !warning_already_issued && gp[i].dens[0] < constants::TYPICAL_ISM_DENS {
             warning_already_issued = true;
             let msg = "WARNING: You have a grid point with a density lower than the typical ISM density. \
             This may cause numerical issues. Please check your input file.";
@@ -653,7 +656,7 @@ fn write_vtk_unstructured_points(gp: &[Grid], par: &ParameterInput) -> Result<()
         }
     }
 
-    let mut file = File::create(&par.grid_file)?;
+    let mut file = File::create(&par.grid_file.as_ref().unwrap())?;
 
     // Write the VTK header
     writeln!(file, "# vtk DataFile Version 3.0")?;

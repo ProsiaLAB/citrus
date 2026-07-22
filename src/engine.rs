@@ -15,7 +15,7 @@ pub fn run<M: Model>(
     model: M,
     par: &mut ParameterInput,
     imgs: &mut [ImageInput],
-    mol_data: &Option<Vec<MolData>>,
+    mol_data: Option<&Vec<MolData>>,
 ) -> Result<()> {
     if par.n_solve_iters > par.n_solve_iters_done || par.lte_only {
         par.do_solve_rte = true;

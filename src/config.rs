@@ -7,19 +7,17 @@ use codata as cc;
 use ndarray::array;
 use planetes_ext::types::Vec3;
 use planetes_ext::types::{RMatrix, RVector};
+use rand::RngExt;
+use rand::SeedableRng;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 use serde::Deserializer;
 
 use crate::collparts::MolData;
+use crate::constants;
 use crate::constants::N_DIMS;
 use crate::lines::Spec;
 use crate::models::Model;
-
-/// A container for all the images in the configuration file
-type Images = Vec<ImageInput>;
-type MolDataVec = Vec<MolData>;
 
 /// This struct contains all basic settings such as number of grid points,
 /// model radius, input and output filenames, etc. Some of these parameters
@@ -330,6 +328,7 @@ pub struct ParameterInput {
     pub(crate) use_vel_func_in_raytrace: bool,
     pub(crate) edge_vels_available: bool,
     pub(crate) write_grid_at_stage: Vec<bool>,
+    pub(crate) do_pre_grid: bool,
 }
 
 impl Default for ParameterInput {
@@ -337,7 +336,7 @@ impl Default for ParameterInput {
         ParameterInput {
             radius: 0.0,
             min_scale: 0.0,
-            cmb_temp: cc::LOCAL_CMB_TEMP_SI,
+            cmb_temp: constants::LOCAL_CMB_TEMP_SI,
             n_sink_points: 0,
             p_intensity: 0,
             enable_line_blending: false,
@@ -378,7 +377,8 @@ impl Default for ParameterInput {
             do_mol_calcs: false,
             use_vel_func_in_raytrace: false,
             edge_vels_available: false,
-            write_grid_at_stage: vec![false; cc::NUM_OF_GRID_STAGES],
+            write_grid_at_stage: vec![false; constants::NUM_OF_GRID_STAGES],
+            do_pre_grid: false,
         }
     }
 }
@@ -562,6 +562,12 @@ pub enum SamplingAlgorithm {
     Modern(Vec<GridDensityMaxima>),
 }
 
+impl SamplingAlgorithm {
+    pub fn is_legacy(&self) -> bool {
+        !matches!(self, SamplingAlgorithm::Modern(_))
+    }
+}
+
 /// Represents a grid density maximum for use with
 /// the [`Modern`][SamplingAlgorithm::Modern] sampling algorithm.
 #[derive(Deserialize, Debug)]
@@ -585,7 +591,7 @@ pub enum RayTraceAlgorithm {
 #[serde(default, rename_all = "snake_case")]
 pub struct ImageInput {
     pub nchan: usize,
-    pub trans: usize,
+    pub trans: Option<usize>,
     pub mol_i: usize,
     pub pixel: Vec<Spec>,
     pub vel_res: f64,
@@ -595,7 +601,7 @@ pub struct ImageInput {
     pub freq: f64,
     pub bandwidth: f64,
     pub filename: String,
-    pub source_velocity: Option<f64>,
+    pub source_velocity: f64,
     pub theta: f64,
     pub phi: f64,
     pub inclination: f64,
@@ -604,7 +610,7 @@ pub struct ImageInput {
     #[serde(deserialize_with = "from_parsec")]
     pub distance: f64,
     // TODO: Separate config params from data params
-    // pub rotation_matrix: RMatrix,
+    pub rotation_matrix: RMatrix,
     pub do_interpolate_vels: bool,
     pub do_line: bool,
 }
@@ -613,7 +619,7 @@ impl Default for ImageInput {
     fn default() -> Self {
         ImageInput {
             nchan: 0,
-            trans: 0,
+            trans: None,
             mol_i: 0,
             vel_res: 0.0,
             img_res: 0.0,
@@ -621,7 +627,7 @@ impl Default for ImageInput {
             unit: Unit::JanskyPerPixel,
             freq: 0.0,
             bandwidth: 0.0,
-            source_velocity: None,
+            source_velocity: 0.0,
             theta: 0.0,
             phi: 0.0,
             inclination: 0.0,
@@ -632,7 +638,7 @@ impl Default for ImageInput {
             do_line: false,
             pixel: Vec::new(),
             filename: String::new(),
-            // rotation_matrix: RMatrix::eye(N_DIMS),
+            rotation_matrix: RMatrix::eye(N_DIMS),
         }
     }
 }
@@ -652,28 +658,28 @@ pub struct Orientation {
     // pub rotation_matrix: RMatrix,
 }
 
-pub struct Common {
+pub struct Image {
     pub spatial: Spatial,
     pub orientation: Orientation,
     pub filename: String,
     pub unit: Unit,
-    pub source_velocity: Option<f64>,
+    pub source_velocity: f64,
     pub interpolate_vels: bool,
     pub pixels: Vec<Spec>,
 }
 
-pub enum Image {
+pub enum ImageKind {
     Continuum(ContinuumImage),
     Line(LineImage),
 }
 
 pub struct ContinuumImage {
-    pub common: Common,
+    pub image: Image,
     pub freq: f64,
 }
 
 pub struct LineImage {
-    pub common: Common,
+    pub image: Image,
     pub freq: LineFreq,
     pub spectral: SpectralAxis,
 }
@@ -701,11 +707,11 @@ pub enum Unit {
     OpticalDepth,
 }
 
-impl TryFrom<ImageInput> for Image {
+impl TryFrom<ImageInput> for ImageKind {
     type Error = ImageError;
 
     fn try_from(raw: ImageInput) -> Result<Self, Self::Error> {
-        let common = Common {
+        let image = Image {
             spatial: Spatial {
                 pxls: raw.pxls,
                 img_res: raw.img_res,
@@ -727,9 +733,9 @@ impl TryFrom<ImageInput> for Image {
         };
 
         if raw.do_line {
-            let freq = if raw.trans > 0 {
+            let freq = if let Some(trans) = raw.trans {
                 LineFreq::Transition {
-                    trans: raw.trans,
+                    trans,
                     mol_i: raw.mol_i,
                 }
             } else {
@@ -755,8 +761,8 @@ impl TryFrom<ImageInput> for Image {
                 _ => return Err(ImageError::InvalidSpectralDefinition),
             };
 
-            Ok(Image::Line(LineImage {
-                common,
+            Ok(ImageKind::Line(LineImage {
+                image,
                 freq,
                 spectral,
             }))
@@ -765,8 +771,8 @@ impl TryFrom<ImageInput> for Image {
                 return Err(ImageError::ContinuumNeedsFreq);
             }
 
-            Ok(Image::Continuum(ContinuumImage {
-                common,
+            Ok(ImageKind::Continuum(ContinuumImage {
+                image,
                 freq: raw.freq,
             }))
         }
@@ -797,7 +803,7 @@ impl Config {
     }
 
     /// Parse the configuration for correctness and consistency
-    pub fn parse<M: Model>(&mut self, model: &M) {
+    pub fn parse<M: Model>(&mut self, model: &M) -> Result<()> {
         let mut r = Vec3::zero();
         let mut temp_point_density = 0.0;
 
@@ -875,12 +881,12 @@ impl Config {
                 let mut rand_gen = if true {
                     // Use fixed seed for reproducibility
                     // Note: SeedableRng::seed_from_u64 takes a u64 seed
-                    StdRng::seed_from_u64(140978)
+                    StdRng::seed_from_u64(140_978)
                 } else {
+                    let mut thread_rng = rand::rng();
                     // Seed from the system's entropy source for non-reproducible randomness
                     // StdRng::from_entropy is a good way to get a random seed
-                    StdRng::try_from_os_rng()
-                        .expect("Failed to seed random number generator from entropy")
+                    StdRng::from_rng(&mut thread_rng)
                 };
                 println!("Random number generator initialized.");
                 let mut found_good_value = false;
@@ -926,7 +932,7 @@ impl Config {
             }
         }
 
-        for i in 0..cc::NUM_OF_GRID_STAGES {
+        for i in 0..constants::NUM_OF_GRID_STAGES {
             if !self.parameters.grid_out_files[i].is_empty() {
                 self.parameters.write_grid_at_stage[i] = true;
             }
@@ -954,7 +960,7 @@ impl Config {
         self.parameters.taylor_cutoff = (24.0 * f64::EPSILON).powf(0.25);
 
         // Allocate pixel space and parse image information
-        for image in self.images.iter_mut() {
+        for (i, image) in self.images.iter_mut().enumerate() {
             if image.nchan == 0 && image.vel_res < 0.0 {
                 // User has set neither `nchan` nor `vel_res`
                 // One of the two are required for a line image
@@ -967,7 +973,7 @@ impl Config {
                 if image.freq == 0.0 {
                     panic!("You must set a frequency for continuum image.");
                 }
-                if image.trans > 0 || image.bandwidth > 0.0 {
+                if image.trans.is_some() || image.bandwidth > 0.0 {
                     eprintln!(
                         "Transition number and bandwidth are not relevant for a continuum image. They will be ignored."
                     );
@@ -998,50 +1004,49 @@ impl Config {
                 }
                 // Check that we have keywords which allow us to calculate the image
                 // frequency (if necessary) after reading in the moldata file:
-                if image.trans > 0 {
+                if image.trans.is_some() {
                     // User has set of `trans`, posssibly also `freq`
                     if image.freq > 0.0 {
                         eprintln!(
                             "Ignoring user-set frequency since transition number is set. The frequency will be calculated from the molecular data file."
                         );
                     }
-                    if pars.n_species > 1 {
+                    if self.parameters.n_species > 1 {
                         let msg = format!(
-                            "WARNING: Image {} did not have ``mol_i`` set, \
+                            "WARNING: Image {i} did not have ``mol_i`` set, \
                                 Therefore, first molecule will be used.",
-                            key
                         );
                         eprintln!("{}", msg);
-                        img.mol_i = 0;
+                        image.mol_i = 0;
                     }
-                } else if img.freq < 0.0 {
+                } else if image.freq < 0.0 {
                     // User has not set `trans`, nor `freq`
                     bail!(
                         "You must either set `trans` or `freq` for a line image (and optionally the `mol_i`"
                     );
                 } // else user has set `freq`
-                img.do_line = true;
+                image.do_line = true;
             } // End of check for line or continuum image
-            if img.img_res < 0.0 {
+            if image.img_res < 0.0 {
                 bail!("You must set image resolution.");
             }
-            if img.pxls <= 0 {
+            if image.pxls == 0 {
                 bail!("You must set number of pixels.");
             }
-            if img.distance <= 0.0 {
+            if image.distance <= 0.0 {
                 bail!("You must set distance to source.");
             }
-            img.img_res *= cc::ARCSEC_TO_RAD;
-            img.pixel = {
-                let mut v = Vec::with_capacity((img.pxls * img.pxls) as usize);
-                for _ in 0..(img.pxls * img.pxls) {
+            image.img_res = (image.img_res / 3600.0).to_radians();
+            image.pixel = {
+                let mut v = Vec::with_capacity((image.pxls * image.pxls) as usize);
+                for _ in 0..(image.pxls * image.pxls) {
                     v.push(Spec::default());
                 }
                 v
             };
-            for spec in &mut img.pixel {
-                spec.intense = RVector::zeros(img.nchan);
-                spec.tau = RVector::zeros(img.nchan);
+            for spec in &mut image.pixel {
+                spec.intense = RVector::zeros(image.nchan);
+                spec.tau = RVector::zeros(image.nchan);
             }
 
             // Calculate the rotation matrix
@@ -1088,18 +1093,19 @@ impl Config {
                         ( sin(ph)  0   cos(ph) )
 
                 */
-            let do_theta_phi =
-                img.inclination < -900.0 || img.azimuth < -900.0 || img.position_angle < -900.0;
+            let do_theta_phi = image.inclination < -900.0
+                || image.azimuth < -900.0
+                || image.position_angle < -900.0;
             if do_theta_phi {
                 // For the present position angle is not implemented
                 // for the theta/phi scheme, so we will just load the
                 // the identity matrix
-                img.rotation_matrix = RMatrix::eye(3);
+                image.rotation_matrix = RMatrix::eye(3);
             } else {
                 // Load position angle matrix
-                let cos_pa = img.position_angle.cos();
-                let sin_pa = img.position_angle.sin();
-                img.rotation_matrix = array![
+                let cos_pa = image.position_angle.cos();
+                let sin_pa = image.position_angle.sin();
+                image.rotation_matrix = array![
                     [cos_pa, -sin_pa, 0.0],
                     [sin_pa, cos_pa, 0.0],
                     [0.0, 0.0, 1.0]
@@ -1107,8 +1113,8 @@ impl Config {
             }
             let aux_rotation_matrix = if do_theta_phi {
                 // Load phi rotation matrix R_phi
-                let cos_phi = img.phi.cos();
-                let sin_phi = img.phi.sin();
+                let cos_phi = image.phi.cos();
+                let sin_phi = image.phi.sin();
                 array![
                     [cos_phi, 0.0, -sin_phi],
                     [0.0, 1.0, 0.0],
@@ -1116,8 +1122,8 @@ impl Config {
                 ]
             } else {
                 // Load inclination matrix R_incl
-                let cos_incl = (img.inclination + std::f64::consts::PI).cos();
-                let sin_incl = (img.inclination + std::f64::consts::PI).sin();
+                let cos_incl = (image.inclination + std::f64::consts::PI).cos();
+                let sin_incl = (image.inclination + std::f64::consts::PI).sin();
                 array![
                     [cos_incl, 0.0, -sin_incl],
                     [0.0, 1.0, 0.0],
@@ -1125,26 +1131,26 @@ impl Config {
                 ]
             };
             // Multiply the two matrices
-            let _temp_matrix = img.rotation_matrix.dot(&aux_rotation_matrix);
+            let _temp_matrix = image.rotation_matrix.dot(&aux_rotation_matrix);
         }
 
-        pars.n_line_images = 0;
-        pars.n_cont_images = 0;
-        pars.do_interpolate_vels = false;
+        self.parameters.n_line_images = 0;
+        self.parameters.n_cont_images = 0;
+        self.parameters.do_interpolate_vels = false;
 
-        for (_, img) in imgs.iter_mut().enumerate() {
-            if img.do_line {
-                pars.n_line_images += 1;
+        for image in self.images.iter_mut() {
+            if image.do_line {
+                self.parameters.n_line_images += 1;
             } else {
-                pars.n_cont_images += 1;
+                self.parameters.n_cont_images += 1;
             }
-            if img.do_interpolate_vels {
-                pars.do_interpolate_vels = true;
+            if image.do_interpolate_vels {
+                self.parameters.do_interpolate_vels = true;
             }
         }
 
-        if pars.n_cont_images > 0 {
-            match &pars.dust_file {
+        if self.parameters.n_cont_images > 0 {
+            match &self.parameters.dust_file {
                 Some(dust) if !dust.is_empty() => {
                     // Open the dust file and check if it exists and if it is empty
                     let path = Path::new(dust);
@@ -1167,26 +1173,26 @@ impl Config {
             }
         }
 
-        pars.use_vel_func_in_raytrace = pars.n_line_images > 0
-            && pars.ray_trace_algorithm == RayTraceAlgorithm::Legacy
-            && !pars.do_pregrid;
+        self.parameters.use_vel_func_in_raytrace = self.parameters.n_line_images > 0
+            && self.parameters.ray_trace_algorithm == RayTraceAlgorithm::Legacy
+            && !self.parameters.do_pre_grid;
 
-        pars.edge_vels_available = false;
+        self.parameters.edge_vels_available = false;
 
-        if pars.lte_only {
-            if pars.n_solve_iters > 0 {
+        if self.parameters.lte_only {
+            if self.parameters.n_solve_iters > 0 {
                 let msg = "Requesting `n_solve_iters > 0` in LTE only mode \
             will have no effect";
                 eprintln!("{}", msg);
-            } else if pars.n_solve_iters <= pars.n_solve_iters_done {
+            } else if self.parameters.n_solve_iters <= self.parameters.n_solve_iters_done {
                 let msg = "Requesting `n_solve_iters <= n_solve_iters_done` in LTE only mode \
             will have no effect";
                 eprintln!("{}", msg);
             }
         }
 
-        let mol_data = if pars.n_species > 0 {
-            // defaults::mol_data(pars.n_species)
+        let mol_data: Option<MolData> = if self.parameters.n_species > 0 {
+            // defaults::mol_data(self.parameters.n_species)
             todo!()
         } else {
             None
@@ -1194,11 +1200,13 @@ impl Config {
 
         let mut default_density_power: f64;
 
-        if par.sampling_algorithm == 0 {
-            default_density_power = defaults::DENSITY_EXP;
+        if self.parameters.sampling_algorithm.is_legacy() {
+            default_density_power = constants::DENSITY_EXP;
         } else {
-            default_density_power = defaults::TREE_EXP;
+            default_density_power = constants::TREE_EXP;
         }
+
+        Ok(())
     }
 }
 
@@ -1208,7 +1216,7 @@ where
     D: Deserializer<'de>,
 {
     let val = f64::deserialize(deserializer)?;
-    Ok(val * cc::AU_SI)
+    Ok(val * cc::astro::AU_SI)
 }
 
 /// Deserialize a value in parsecs (pc) to SI units (meters).
@@ -1217,5 +1225,5 @@ where
     D: Deserializer<'de>,
 {
     let val = f64::deserialize(deserializer)?;
-    Ok(val * cc::PARSEC_SI)
+    Ok(val * cc::astro::PC_SI)
 }

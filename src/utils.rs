@@ -6,6 +6,7 @@ use codata as cc;
 use planetes_ext::types::{RVecView, RVector};
 
 use crate::config::ParameterInput;
+use crate::constants;
 
 use self::erf::erf;
 use self::interp::{CubicSpline, SplineError};
@@ -34,19 +35,21 @@ pub fn calc_source_fn(dtau: f64, taylor_cutoff: f64) -> (f64, f64) {
 }
 
 pub fn planck_fn(freq: f64, t_kelvin: f64) -> f64 {
-    if t_kelvin < cc::CITRUS_GLOBAL_EPS {
+    if t_kelvin < constants::CITRUS_GLOBAL_EPS {
         0.0
     } else {
-        let wn = freq / cc::SPEED_OF_LIGHT_SI;
-        if cc::PLANCK_SI * freq > 100.0 * cc::BOLTZMANN_SI * t_kelvin {
-            2.0 * cc::PLANCK_SI
+        let wn = freq / cc::SPEED_OF_LIGHT_IN_VACUUM_SI;
+        if cc::PLANCK_CONSTANT_SI * freq > 100.0 * cc::BOLTZMANN_CONSTANT_SI * t_kelvin {
+            2.0 * cc::PLANCK_CONSTANT_SI
                 * wn
                 * wn
                 * freq
-                * (-cc::PLANCK_SI * freq / cc::BOLTZMANN_SI / t_kelvin).exp()
+                * (-cc::PLANCK_CONSTANT_SI * freq / cc::BOLTZMANN_CONSTANT_SI / t_kelvin).exp()
         } else {
-            2.0 * cc::PLANCK_SI * wn * wn * freq
-                / ((cc::PLANCK_SI * freq / cc::BOLTZMANN_SI / t_kelvin - 1.0).exp() - 1.0)
+            2.0 * cc::PLANCK_CONSTANT_SI * wn * wn * freq
+                / ((cc::PLANCK_CONSTANT_SI * freq / cc::BOLTZMANN_CONSTANT_SI / t_kelvin - 1.0)
+                    .exp()
+                    - 1.0)
         }
     }
 }
@@ -82,7 +85,7 @@ pub fn interpolate_kappa(freq: f64, lam: &RVecView, kap: &RVecView) -> Result<f6
     let spline = CubicSpline::new(lam, kap)?;
 
     // Calculate log10 of wavelength (SPEED_OF_LIGHT_SI / freq)
-    let loglam = (cc::SPEED_OF_LIGHT_SI / freq).log10();
+    let loglam = (cc::SPEED_OF_LIGHT_IN_VACUUM_SI / freq).log10();
 
     let n_entries = lam.len();
     let kappa_log10: f64;
@@ -116,13 +119,13 @@ pub fn get_dust_temp(ts_kelvin: &[f64; 2]) -> f64 {
 
 pub fn get_dtg(par: &ParameterInput, dens: &RVecView, gtd: f64) -> f64 {
     if par.collisional_partner_user_set_flags == 0 {
-        cc::AMU_SI * 2.4 * dens[0] / gtd
+        cc::ATOMIC_UNIT_OF_MASS_SI * 2.4 * dens[0] / gtd
     } else {
         let mut gas_mass_density_amus = 0.0;
         for i in 0..par.n_densities {
             gas_mass_density_amus += dens[i] * par.collisional_partner_mol_weights[i];
         }
-        cc::AMU_SI * gas_mass_density_amus / gtd
+        cc::ATOMIC_UNIT_OF_MASS_SI * gas_mass_density_amus / gtd
     }
 }
 

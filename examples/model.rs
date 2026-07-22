@@ -2,10 +2,9 @@ use std::env;
 
 use anyhow::Result;
 use anyhow::bail;
+use codata as cc;
 
 use citrus::config::Config;
-use citrus::config::Parameters;
-use citrus::constants as cc;
 use citrus::engine;
 use citrus::models::Model;
 use planetes_ext::types::Vec3;
@@ -14,12 +13,12 @@ pub struct Lime;
 
 impl Model for Lime {
     fn density(&self, point: &Vec3) -> f64 {
-        let rmin = 0.7 * cc::AU_SI;
+        let rmin = 0.7 * cc::astro::AU_SI;
         let r = point.norm();
 
         let r = if r > rmin { r } else { rmin };
 
-        1.5e6 * (r / (300.0 * cc::AU_SI)).powf(-1.5) * 1e6
+        1.5e6 * (r / (300.0 * cc::astro::AU_SI)).powf(-1.5) * 1e6
     }
 
     fn temperature(&self, point: &Vec3) -> f64 {
@@ -63,13 +62,14 @@ impl Model for Lime {
     }
 
     fn velocity(&self, point: &Vec3) -> Vec3 {
-        let rmin = 0.1 * cc::AU_SI;
+        let rmin = 0.1 * cc::astro::AU_SI;
 
         let r = point.norm();
 
         let r = if r > rmin { r } else { rmin };
 
-        let free_fall_velocity = (2.0 * cc::GRAVITATIONAL_CONST_SI * 1.989e30 / r).sqrt();
+        let free_fall_velocity =
+            (2.0 * cc::NEWTONIAN_CONSTANT_OF_GRAVITATION_SI * 1.989e30 / r).sqrt();
 
         Vec3::new(
             -point.x * free_fall_velocity / r,
@@ -93,7 +93,7 @@ fn main() -> Result<()> {
     // Load the TOML file
     let mut input_config = Config::from_path(path).expect("Failed to load config");
 
-    input_config.parse(&Lime);
+    input_config.parse(&Lime)?;
 
     dbg!("Loaded config: {:?}", &input_config);
 
@@ -101,7 +101,7 @@ fn main() -> Result<()> {
         Lime,
         &mut input_config.parameters,
         &mut input_config.images,
-        &input_config.molecular_data,
+        None,
     )?;
     Ok(())
 }

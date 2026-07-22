@@ -12,8 +12,11 @@ use qhull::QhBuilder;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::collparts::MolData;
+use crate::config::Image;
+use crate::config::ImageKind;
 use crate::config::RayTraceAlgorithm;
 use crate::config::{ImageInput, ParameterInput};
+use crate::constants;
 use crate::constants::N_DIMS;
 use crate::grid::DelaunayResult;
 use crate::grid::delaunay;
@@ -129,9 +132,9 @@ impl ChainContext {
                     let mut intersect = face.intersect_line_with_face(x, dir)?;
                     intersect.fi = fi;
                     if intersect.orientation == Orientation::ExitFace {
-                        if intersect.coll_par - cc::CITRUS_RT_EPS > 0.0 {
+                        if intersect.coll_par - constants::CITRUS_RT_EPS > 0.0 {
                             good_exit_fis.push(fi);
-                        } else if intersect.coll_par + cc::CITRUS_RT_EPS > 0.0 {
+                        } else if intersect.coll_par + constants::CITRUS_RT_EPS > 0.0 {
                             marginal_exit_fis.push(fi);
                         }
                     }
@@ -356,7 +359,7 @@ impl Face {
     }
 
     fn intersect_line_with_face(&self, x: &RVector, dir: &RVector) -> Result<Intersect, RTCError> {
-        let eps_inv = 1.0 / cc::CITRUS_RT_EPS;
+        let eps_inv = 1.0 / constants::CITRUS_RT_EPS;
         let mut vs = RMatrix::zeros((N_DIMS - 1, N_DIMS));
         let mut norm = RVector::zeros(N_DIMS);
         let mut px_in_face = RVector::zeros(N_DIMS - 1);
@@ -609,7 +612,7 @@ fn follow_ray_through_cells(
                 let mut intersect = face.intersect_line_with_face(x, dir)?;
                 intersect.fi = fi;
                 if intersect.orientation == Orientation::EntryFace
-                    && intersect.coll_par + cc::CITRUS_RT_EPS > 0.0
+                    && intersect.coll_par + constants::CITRUS_RT_EPS > 0.0
                 {
                     if num_entry_faces > MAX_NUM_ENTRY_FACES {
                         return Err(RTCError::TooManyEntries);
@@ -894,15 +897,14 @@ fn trace_ray(
                             if mol_data[moli].freq[linei] > img.freq - img.bandwidth * 0.5
                                 && mol_data[moli].freq[linei] < img.freq + img.bandwidth * 0.5
                             {
-                                let line_red_shift = if img.trans > -1 {
-                                    (mol_data[moli].freq[img.trans as usize]
-                                        - mol_data[moli].freq[linei])
-                                        / mol_data[moli].freq[img.trans as usize]
-                                        * cc::SPEED_OF_LIGHT_SI
+                                let line_red_shift = if let Some(trans) = img.trans {
+                                    (mol_data[moli].freq[trans] - mol_data[moli].freq[linei])
+                                        / mol_data[moli].freq[trans]
+                                        * cc::SPEED_OF_LIGHT_IN_VACUUM_SI
                                 } else {
                                     (img.freq - mol_data[moli].freq[linei])
                                         / mol_data[moli].freq[linei]
-                                        * cc::SPEED_OF_LIGHT_SI
+                                        * cc::SPEED_OF_LIGHT_IN_VACUUM_SI
                                 };
                                 let delta_v = v_this_chan - img.source_velocity - line_red_shift;
                                 let binv = if let Some(mols) = &gp[posn].mol {
@@ -1483,13 +1485,12 @@ fn trace_ray_smooth(
                             if mdi.freq[linei] > img.freq - img.bandwidth * 0.5
                                 && mdi.freq[linei] < img.freq + img.bandwidth * 0.5
                             {
-                                let line_red_shift = if img.trans > -1 {
-                                    (mdi.freq[img.trans as usize] - mdi.freq[linei])
-                                        / mdi.freq[img.trans as usize]
-                                        * cc::SPEED_OF_LIGHT_SI
+                                let line_red_shift = if let Some(trans) = img.trans {
+                                    (mdi.freq[trans] - mdi.freq[linei]) / mdi.freq[trans]
+                                        * cc::SPEED_OF_LIGHT_IN_VACUUM_SI
                                 } else {
                                     (img.freq - mdi.freq[linei]) / mdi.freq[linei]
-                                        * cc::SPEED_OF_LIGHT_SI
+                                        * cc::SPEED_OF_LIGHT_IN_VACUUM_SI
                                 };
                                 let delta_v = v_this_channel - img.source_velocity - line_red_shift;
                                 let vfac = if img.do_interpolate_vels {
@@ -1533,6 +1534,10 @@ fn trace_ray_smooth(
     Ok(())
 }
 
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::similar_names)]
+#[allow(clippy::cast_precision_loss)]
+#[allow(clippy::cast_sign_loss)]
 fn locate_ray_on_image(
     x: &[f64; 2],
     size: f64,
@@ -1540,13 +1545,13 @@ fn locate_ray_on_image(
     img_centre_y_pxls: f64,
     img: &ImageInput,
 ) -> (bool, usize) {
-    let xi = (x[0] / size + img_centre_x_pxls).floor() as i64;
-    let yi = (x[1] / size + img_centre_y_pxls).floor() as i64;
+    let xi = (x[0] / size + img_centre_x_pxls).floor() as usize;
+    let yi = (x[1] / size + img_centre_y_pxls).floor() as usize;
 
-    if xi < 0 || xi >= img.pxls || yi < 0 || yi >= img.pxls {
+    if xi == 0 || xi >= img.pxls || yi == 0 || yi >= img.pxls {
         (false, 0)
     } else {
-        (true, (yi * img.pxls + xi) as usize)
+        (true, (yi * img.pxls + xi))
     }
 }
 
@@ -1803,25 +1808,28 @@ pub fn raytrace(
     let img_centre_y_pxls = img.pxls as f64 / 2.0;
 
     if img.do_line {
-        if img.trans > -1 {
-            img.freq = mol_data[img.mol_i].freq[img.trans as usize];
+        if let Some(trans) = img.trans {
+            img.freq = mol_data[img.mol_i].freq[trans];
         }
         if img.bandwidth > 0.0 && img.vel_res > 0.0 {
-            img.nchan = (img.bandwidth / (img.vel_res / cc::SPEED_OF_LIGHT_SI * img.freq)) as usize;
+            img.nchan = (img.bandwidth / (img.vel_res / cc::SPEED_OF_LIGHT_IN_VACUUM_SI * img.freq))
+                as usize;
         } else if img.bandwidth > 0.0 && img.nchan > 0 {
-            img.vel_res = img.bandwidth * cc::SPEED_OF_LIGHT_SI / img.freq / img.nchan as f64;
+            img.vel_res =
+                img.bandwidth * cc::SPEED_OF_LIGHT_IN_VACUUM_SI / img.freq / img.nchan as f64;
         } else {
-            img.bandwidth = img.nchan as f64 * img.vel_res / cc::SPEED_OF_LIGHT_SI * img.freq;
+            img.bandwidth =
+                img.nchan as f64 * img.vel_res / cc::SPEED_OF_LIGHT_IN_VACUUM_SI * img.freq;
         }
     }
 
     let cmb_freq = if img.do_line {
-        let (cmb_mol_i, cmb_line_i) = if img.trans >= 0 {
-            (img.mol_i, img.trans)
+        let (cmb_mol_i, cmb_line_i) = if let Some(trans) = img.trans {
+            (img.mol_i, trans)
         } else {
             let mut min_freq = (img.freq - mol_data[0].freq[0]).abs();
             let mut cmb_mol_i = 0;
-            let mut cmb_line_i = 0i64;
+            let mut cmb_line_i = 0;
             for (mol_i, mol_data_i) in mol_data.iter().enumerate().take(par.n_species) {
                 for line_i in 0..mol_data[mol_i].nline {
                     if mol_i == 0 && line_i == 0 {
@@ -1831,7 +1839,7 @@ pub fn raytrace(
                     if abs_delta_freq < min_freq {
                         min_freq = abs_delta_freq.abs();
                         cmb_mol_i = mol_i;
-                        cmb_line_i = line_i as i64;
+                        cmb_line_i = line_i;
                     }
                 }
             }
@@ -1842,7 +1850,7 @@ pub fn raytrace(
         img.freq
     };
 
-    let local_cmb = planck_fn(cmb_freq, cc::LOCAL_CMB_TEMP_SI);
+    let local_cmb = planck_fn(cmb_freq, constants::LOCAL_CMB_TEMP_SI);
     calc_grid_cont_dust_opacity(gp, par, cmb_freq, lam_kap)?;
 
     for ppi in 0..tot_n_img_pxls {
